@@ -1,0 +1,27 @@
+#! /usr/bin/bash
+set -e
+
+printf "%15s %5s %6s %6s %6s %6s %6s\n" FILENAME IMPL LINES WORDS CHARS STRINGS AVERAGE
+for file in Compilers_PE2_testcases/test_*.txt; do
+    read -r wc_lines wc_words wc_chars wc_strings wc_avg <<< $(cat $file | wc)
+    read -r pr_lines pr_words pr_chars pr_strings pr_avg <<< $(./compilers-pe2 < $file)
+
+    tailname=${file##*/}
+    printf "%15s %5s %6d %6d %6d %6s %6s\n"  \
+        $tailname \
+        wc \
+        $wc_lines \
+        $wc_words \
+        $wc_chars \
+        - \
+        -
+    
+    printf "%15s %5s %6d %6d %6d %6d %6.2f\n"  \
+        "-----------" \
+        ours \
+        $pr_lines \
+        $pr_words \
+        $pr_chars \
+        $pr_strings \
+        $pr_avg
+done
