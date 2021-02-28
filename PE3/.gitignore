@@ -1,0 +1,4 @@
+src/y.tab.h
+src/y.tab.c
+vsl_programs/
+scanner

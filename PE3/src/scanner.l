@@ -1,10 +1,10 @@
 %{
 #include <stdio.h>
-#include "y.tab.h"
+#include "src/y.tab.h"
 // #include <vslc.h>
 extern int yylval;
 
-enum { EOP = 0, NUMBER, IDENTIFIER, DEF, BLOCK_BEGIN, BLOCK_END, RETURN, PRINT, IF, THEN, ELSE, WHILE, DO, VAR, COMMENT, UNK, PAREN_END, PAREN_START, OP_GT, OP_LT, OP_EQUAL, OP_DIVIDE, OP_MUL, OP_SUBTRACT, OP_ADD, ASSIGNMENT, COMMA, STRING};
+// enum { EOP = 0, NUMBER, IDENTIFIER, DEF, BLOCK_BEGIN, BLOCK_END, RETURN, PRINT, IF, THEN, ELSE, WHILE, DO, VAR, COMMENT, UNK, PAREN_END, PAREN_START, OP_GT, OP_LT, OP_EQUAL, OP_DIVIDE, OP_MUL, OP_SUBTRACT, OP_ADD, ASSIGNMENT, COMMA, STRING};
 %}
 
 %x SCOMMENT
@@ -16,7 +16,6 @@ enum { EOP = 0, NUMBER, IDENTIFIER, DEF, BLOCK_BEGIN, BLOCK_END, RETURN, PRINT, 
 %option yylineno
 
 %%
--                       {return UMINUS; }
 def                      { return FUNC; }
 print                    { return PRINT; }
 return                   { return RETURN; }
@@ -29,16 +28,6 @@ do                       { return DO; }
 begin                    { return OPENBLOCK; }
 end                      { return CLOSEBLOCK; }
 var                      { return VAR; }
-:=                      {return ASSIGNMENT; }
-\+                       {return OP_ADD; }
-\*                       {return OP_MUL; }
-\/                      {return OP_DIVIDE; }
-=                       {return OP_EQUAL; }
-\<                       {return OP_LT; }
-\>                       {return OP_GT; }
-\(                       {return PAREN_START; }
-\)                       {return PAREN_END; }
-,                       {return COMMA; }
 \<\<    { return LSHIFT; }
 \>\> {return RSHIFT;}
 
@@ -50,10 +39,13 @@ var                      { return VAR; }
 
 \/\/                       {  BEGIN(SCOMMENT); yymore(); }
 <SCOMMENT>[^\n]      { yymore(); }
-<SCOMMENT>\n             { BEGIN(INITIAL); return COMMENT; }
+<SCOMMENT>\n             { BEGIN(INITIAL); }
 
 [0-9]+                 { return NUMBER; }
 [a-zA-Z_][_a-zA-Z0-9]* { return IDENTIFIER; }
+
+:= { return (int) yytext[0]; }  /* : does not appear elsewhere, so we can safely use `:` as a token. */
+[+\-*/=~|^&()<>,]            { return (int) yytext[0]; }
 
 . { BEGIN(ERROR); yymore(); }
 <ERROR>[^a-zA-Z0-9_+-/*=] { yymore(); }
@@ -69,12 +61,7 @@ int main (void) {
 
     int token;
     while (token = yylex()) {
-        printf("token: %d\n", token);
-        switch (token) {
-            case NUMBER: printf("number, %d, %d", NUMBER, COMMENT); break;
-            case IDENTIFIER: printf("identifier"); break;
-        }
-        printf(" %s\n", yytext);
+        // printf(" %s\n", yytext);
     }
 
 }
