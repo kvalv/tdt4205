@@ -1,5 +1,7 @@
 #include <vslc.h>
 
+#define MAX_NB_CHILDREN (3)
+
 
 void
 node_print ( node_t *root, int nesting )
@@ -33,7 +35,24 @@ node_print ( node_t *root, int nesting )
 void
 node_init (node_t *nd, node_index_t type, void *data, uint64_t n_children, ...)
 {
+    if (n_children > MAX_NB_CHILDREN) {
+        printf("Error. Got n_children=%d > MAX_NB_CHILDREN (%d)\n", n_children, MAX_NB_CHILDREN);
+        exit(1);
+    }
+
+    va_list args;
+    va_start(args, data);
+
     nd->type = type;
+    nd->data = va_arg(args, void*);
+
+    nd->children = malloc( sizeof(node_t) * MAX_NB_CHILDREN );
+
+    for (int i =0 ; i < n_children; i++) {
+        printf("setting %d child\n", i);
+        va->children[i] = va_arg(children, *node_t);
+    }
+
 }
 
 
@@ -41,6 +60,8 @@ node_init (node_t *nd, node_index_t type, void *data, uint64_t n_children, ...)
 void
 node_finalize ( node_t *discard )
 {
+    free( discard->children ); 
+    free ( discard );
 }
 
 
@@ -48,5 +69,9 @@ node_finalize ( node_t *discard )
 void
 destroy_subtree ( node_t *discard )
 {
-    free ( discard );
+    // free ( discard );
+    for (int i =0; i < discard->n_children; i++) {
+        destroy_subtree(discard->children[i]);
+    }
+    node_finalize(discard);
 }
