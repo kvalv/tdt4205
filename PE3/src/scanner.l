@@ -28,6 +28,7 @@ do                       { return DO; }
 begin                    { return OPENBLOCK; }
 end                      { return CLOSEBLOCK; }
 var                      { return VAR; }
+:=                       { return ASSIGNMENT; }
 \<\<    { return LSHIFT; }
 \>\> {return RSHIFT;}
 
@@ -44,7 +45,6 @@ var                      { return VAR; }
 [0-9]+                 { return NUMBER; }
 [a-zA-Z_][_a-zA-Z0-9]* { return IDENTIFIER; }
 
-:= { return (int) yytext[0]; }  /* : does not appear elsewhere, so we can safely use `:` as a token. */
 [+\-*/=~|^&()<>,]            { return (int) yytext[0]; }
 
 . { BEGIN(ERROR); yymore(); }
