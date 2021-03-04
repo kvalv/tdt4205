@@ -1,15 +1,13 @@
 %{
 #include <stdio.h>
-#include "src/y.tab.h"
-// #include <vslc.h>
-extern int yylval;
+//#include "src/y.tab.h"
+#include <vslc.h>
+// extern int yylval;
 
-// enum { EOP = 0, NUMBER, IDENTIFIER, DEF, BLOCK_BEGIN, BLOCK_END, RETURN, PRINT, IF, THEN, ELSE, WHILE, DO, VAR, COMMENT, UNK, PAREN_END, PAREN_START, OP_GT, OP_LT, OP_EQUAL, OP_DIVIDE, OP_MUL, OP_SUBTRACT, OP_ADD, ASSIGNMENT, COMMA, STRING};
 %}
 
 %x SCOMMENT
 %x SQUOTE
-%x ERROR
 
 %option noyywrap
 %option array
@@ -47,21 +45,11 @@ var                      { return VAR; }
 
 [+\-*/=~|^&()<>,]            { return (int) yytext[0]; }
 
-. { BEGIN(ERROR); yymore(); }
-<ERROR>[^a-zA-Z0-9_+-/*=] { yymore(); }
-<ERROR>. { /* anything else is the beginning of a valid token */
-           yyless(yyleng-1);  // push back the last character
-           printf("error token: %s\n", yytext);
-           BEGIN(INITIAL);
-         }
-
 %%
 
-int main (void) {
-
-    int token;
-    while (token = yylex()) {
-        // printf(" %s\n", yytext);
-    }
-
-}
+/* int main (void) { */
+/*     int token; */
+/*     while (token = yylex()) { */
+/*         // printf(" %s\n", yytext); */
+/*     } */
+/* } */

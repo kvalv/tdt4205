@@ -1,7 +1,5 @@
 #include <vslc.h>
 
-#define MAX_NB_CHILDREN (3)
-
 
 void
 node_print ( node_t *root, int nesting )
@@ -19,7 +17,8 @@ node_print ( node_t *root, int nesting )
              root->type == EXPRESSION ) 
             printf ( "(%s)", (char *) root->data );
         else if ( root->type == NUMBER_DATA )
-            printf ( "(%lld)", *((int64_t *)root->data) );
+            // printf ( "(%lld)", *((int64_t *)root->data) );
+            printf ( "(%lld)", strtoll(root->data, NULL, 10));
 
         /* Make a new line, and traverse the node's children in the same manner */
         putchar ( '\n' );
@@ -35,22 +34,18 @@ node_print ( node_t *root, int nesting )
 void
 node_init (node_t *nd, node_index_t type, void *data, uint64_t n_children, ...)
 {
-    if (n_children > MAX_NB_CHILDREN) {
-        printf("Error. Got n_children=%d > MAX_NB_CHILDREN (%d)\n", n_children, MAX_NB_CHILDREN);
-        exit(1);
-    }
 
     va_list args;
-    va_start(args, data);
+    va_start(args, n_children);
 
     nd->type = type;
-    nd->data = va_arg(args, void*);
+    nd->data = data;
+    nd->n_children = n_children;
 
-    nd->children = malloc( sizeof(node_t) * MAX_NB_CHILDREN );
+    nd->children = malloc( sizeof(node_t) * n_children );
 
     for (int i =0 ; i < n_children; i++) {
-        printf("setting %d child\n", i);
-        va->children[i] = va_arg(children, *node_t);
+        nd->children[i] = va_arg(args, node_t*);
     }
 
 }
@@ -61,6 +56,7 @@ void
 node_finalize ( node_t *discard )
 {
     free( discard->children ); 
+    free ( discard->data );  // if NULL ptr, no operation is performed.
     free ( discard );
 }
 
