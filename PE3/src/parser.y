@@ -81,8 +81,8 @@ statement_without_if
     | block { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
 
 statement
-    : statement_without_if { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
-    | if_statement  { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
+    : statement_without_if { $$ = $1;}
+    | if_statement  { $$ = $1;}
 
 block 
     : OPENBLOCK declaration_list statement_list CLOSEBLOCK { $$ = new(); node_init($$, BLOCK, NULL, 2, $2, $3);}
