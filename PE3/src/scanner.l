@@ -34,6 +34,7 @@ var                      { return VAR; }
 
 <INITIAL>\"                           { BEGIN(SQUOTE); yymore(); }
 <SQUOTE>[^"]            { yymore(); }
+<SQUOTE>\\\"           { yymore(); }
 <SQUOTE>\"               { BEGIN(INITIAL); return STRING; }
 
 \/\/                       {  BEGIN(SCOMMENT); yymore(); }

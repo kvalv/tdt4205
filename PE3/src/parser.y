@@ -1,11 +1,6 @@
 %{
 #include <vslc.h>
 
-node_t* new() {
-    node_t *nd = (node_t *) malloc ( sizeof(node_t) );
-    return nd;
-}
-
 void* malloc_text(char* s) {
     char *out = malloc(strlen(s) + 1);
     strcpy(out, s);
@@ -76,14 +71,18 @@ declaration_list
 function 
     : FUNC identifier '(' parameter_list ')' statement { $$ = new(); node_init($$, FUNCTION, NULL, 3, $2, $4, $6);}
 
-statement 
+statement_without_if 
     : assignment_statement { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
     | return_statement  { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
     | print_statement  { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
-    | if_statement  { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
+    | if_else_statement { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
     | while_statement  { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
     | null_statement  { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
     | block { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
+
+statement
+    : statement_without_if { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
+    | if_statement  { $$ = new(); node_init($$, STATEMENT, NULL, 1, $1);}
 
 block 
     : OPENBLOCK declaration_list statement_list CLOSEBLOCK { $$ = new(); node_init($$, BLOCK, NULL, 2, $2, $3);}
@@ -106,7 +105,10 @@ null_statement
 
 
 if_statement 
-    : IF relation THEN statement ELSE statement { $$ = new(); node_init($$, IF_STATEMENT, NULL, 3, $2, $4, $6);}
+    : IF relation THEN statement { $$ = new(); node_init($$, IF_STATEMENT, NULL, 2, $2, $4);}
+
+if_else_statement
+    : IF relation THEN statement_without_if ELSE statement { $$ = new(); node_init($$, IF_STATEMENT, NULL, 3, $2, $4, $6);}
 
 while_statement 
     : WHILE relation DO statement { $$ = new(); node_init($$, WHILE_STATEMENT, NULL, 2, $2, $4);}

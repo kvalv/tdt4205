@@ -29,7 +29,7 @@ def main() begin                   // def, identifier (func. def.)
         print a
 
     // This loop prints the integers 5 through 0, skipping 2
-    while a > 0 DO              // while/DO, block statements
+    while a > 0 do              // while/DO, block statements
     begin
         if a - 3 > 0 then       // if/then/else/FI
             a := a - 1

@@ -50,6 +50,10 @@ node_init (node_t *nd, node_index_t type, void *data, uint64_t n_children, ...)
 
 }
 
+node_t* new() {
+    node_t *nd = (node_t *) malloc ( sizeof(node_t) );
+    return nd;
+}
 
 /* Remove a node and its contents */
 void
