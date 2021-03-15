@@ -64,9 +64,20 @@ destroy_subtree ( node_t *discard )
     }
 }
 
-
+//TODO: Implement this.
 void
 simplify_tree ( node_t **simplified, node_t *root )
 {
+
+    for(int i = 0; i < root->n_children; i++){
+        
+        simplify_tree(simplified, root->children[i]);
+        
+        if(root->children[i]->n_children == 1 && &(root->children[i]) == 0){
+        root->children[i] = root->children[i]->children[0];
+        }
+    }
+
+
     *simplified = root;
 }
