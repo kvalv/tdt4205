@@ -64,7 +64,8 @@ destroy_subtree ( node_t *discard )
     }
 }
 
-//TODO: Implement this.
+//TODO: Implement simplify_tree.
+
 void
 simplify_tree ( node_t **simplified, node_t *root )
 {
@@ -72,10 +73,39 @@ simplify_tree ( node_t **simplified, node_t *root )
     for(int i = 0; i < root->n_children; i++){
         
         simplify_tree(simplified, root->children[i]);
-        
-        if(root->children[i]->n_children == 1 && &(root->children[i]) == 0){
+
+        //4.1
+        if(root->children[i]->n_children == 1 && root->children[i]->data == NULL){
         root->children[i] = root->children[i]->children[0];
         }
+
+        //4.2 don't know if i'm doing what im supposed to here.
+        node_index_t child_type = root->children[i]->type;         
+        if(child_type == 1 || 2 < child_type < 10){//List have type value of 1 or between 3 to 9
+            node_t *temp = malloc(sizeof(root->children)+sizeof(root->children[i]->children)-sizeof(node_t));
+            root->n_children = root->children + root->children[i]->n_children - 1;
+            int t = 0;
+            for(int j = 0; j < root->n_children; j++){
+                if(j==i){
+                    for(; j < i + root->children[i]->n_children; j++){
+                        temp[j] = *root->children[i]->children[j-i];
+                    }
+                }
+                temp[j] = *root->children[t];
+                t++;
+            }
+            root->children = temp;
+        }
+
+        //4.3
+        //TODO: Compute the value of the subtrees representing arithmetic operations with constants and replace them with the value.
+        //step 1) all expresions that is on the form number operator number should them selvs be the resluting number. 
+        //Example: expresion is 1+2 then the expresion can be reduced to the number 3. The whole expresion node shoud 
+        //change its semantical data to 3 and type to NUMBER.
+        //step 2) all expresions that has an "=" relation to a number is themselvs a number.
+        //Example: expresion = 3 then the expresion can be reduced to the number 3. The whole relation node should 
+        //change its semantical data to 3 and type to NUMBER.
+
     }
 
 
