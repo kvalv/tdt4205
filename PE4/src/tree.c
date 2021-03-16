@@ -74,11 +74,9 @@ void
 simplify_tree ( node_t **simplified, node_t *root )
 {
 
-
     for(int i = 0; i < root->n_children; i++){
         simplify_tree(simplified, root->children[i]);
     }
-        
 
     // 4.2 -- flattening list structure
     if (is_container_type(root)) {
@@ -127,16 +125,19 @@ simplify_tree ( node_t **simplified, node_t *root )
             root->children[i] = child->children[0];
         }
     }
-    //4.3
-    //TODO: Compute the value of the subtrees representing arithmetic operations with constants and replace them with the value.
-    //step 1) all expresions that is on the form number operator number should them selvs be the resluting number. 
-    //Example: expresion is 1+2 then the expresion can be reduced to the number 3. The whole expresion node shoud 
-    //change its semantical data to 3 and type to NUMBER.
-    //step 2) all expresions that has an "=" relation to a number is themselvs a number.
-    //Example: expresion = 3 then the expresion can be reduced to the number 3. The whole relation node should 
-    //change its semantical data to 3 and type to NUMBER.
 
-
+    // 4.3
+    if ( root->type == EXPRESSION
+         && root->n_children == 2
+         && root->children[0]->type == NUMBER_DATA
+         && root->children[1]->type == NUMBER_DATA) {
+        root->type = NUMBER_DATA;
+        root->n_children = 0;
+        // this is horrible code, isn't it?
+        int v1 = *((int*) root->children[0]->data);
+        int v2 = *((int*) root->children[1]->data);
+        *(int*)root->data = v1+v2;
+    }
 
     *simplified = root;
 }
