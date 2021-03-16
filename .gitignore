@@ -4,3 +4,9 @@ compilers-pe2
 tags
 output.txt
 lex.yy.c
+*.o
+vslc
+parser.c
+scanner.c
+y.tab.h
+*.tree
