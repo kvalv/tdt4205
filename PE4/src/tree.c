@@ -80,15 +80,6 @@ simplify_tree ( node_t **simplified, node_t *root )
     }
         
 
-    /* //4.1 */
-    /* for (int i = 0; i < root->n_children; i++) { */
-    /*     node_t* child = root->children[i]; */
-    /*     if(child->n_children == 1 && child->data == NULL){ */
-    /*         root->children[i] = child->children[0]; */
-    /*     } */
-    /* } */
-
-
     // 4.2 -- flattening list structure
     if (is_container_type(root)) {
         for (int j = 0; j < root->n_children; j++) {
@@ -128,6 +119,14 @@ simplify_tree ( node_t **simplified, node_t *root )
         root->n_children = child->n_children;
     }
 
+    // 4.1 remove purely syntactic values
+    // I am not sure whether `BLOCK` and `GLOBAL` should also be removed
+    for ( int i =0 ; i < root->n_children; i++) {
+        node_t *child = root->children[i];
+        if (child->type == EXPRESSION && child->data == NULL) {
+            root->children[i] = child->children[0];
+        }
+    }
     //4.3
     //TODO: Compute the value of the subtrees representing arithmetic operations with constants and replace them with the value.
     //step 1) all expresions that is on the form number operator number should them selvs be the resluting number. 
