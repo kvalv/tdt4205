@@ -75,7 +75,9 @@ simplify_tree ( node_t **simplified, node_t *root )
 {
 
     for(int i = 0; i < root->n_children; i++){
-        simplify_tree(simplified, root->children[i]);
+        if (root->children[i] != NULL) {
+            simplify_tree(simplified, root->children[i]);
+        }
     }
 
     // 4.2 -- flattening list structure
@@ -121,6 +123,7 @@ simplify_tree ( node_t **simplified, node_t *root )
     // I am not sure whether `BLOCK` and `GLOBAL` should also be removed
     for ( int i =0 ; i < root->n_children; i++) {
         node_t *child = root->children[i];
+        if (child == NULL) { continue; }
         if (child->type == EXPRESSION && child->data == NULL) {
             root->children[i] = child->children[0];
         }
