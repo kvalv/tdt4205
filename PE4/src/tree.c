@@ -91,6 +91,7 @@ simplify_tree ( node_t **simplified, node_t *root )
                         exit(1);
                     case 1:
                         root->children[j] = child->children[0];
+                        node_finalize(child);
                         break;
                     default:
                         root->children[j] = child->children[0];
@@ -102,6 +103,7 @@ simplify_tree ( node_t **simplified, node_t *root )
                         for (int j = 1; j < child->n_children; j++) {
                             root->children[root->n_children++] = child->children[j];
                         }
+                        node_finalize(child);
                         break;
                 }
             }
@@ -117,6 +119,9 @@ simplify_tree ( node_t **simplified, node_t *root )
         node_t *child = root->children[0];
         root->children = child->children;
         root->n_children = child->n_children;
+        // we don't want to `node_finalize` because root has 'taken over'
+        // the child->children pointer.
+        free(child->data); free(child);
     }
 
     // 4.1 remove purely syntactic values
@@ -126,6 +131,7 @@ simplify_tree ( node_t **simplified, node_t *root )
         if (child == NULL) { continue; }
         if (child->type == EXPRESSION && child->data == NULL) {
             root->children[i] = child->children[0];
+            node_finalize(child);
         }
     }
 
@@ -146,6 +152,8 @@ simplify_tree ( node_t **simplified, node_t *root )
             case '*': *result = *left * *right; break;
             case '/': *result = *left / *right; break;
         }
+        node_finalize(root->children[0]);
+        node_finalize(root->children[1]);
     }
 
     *simplified = root;
