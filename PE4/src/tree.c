@@ -70,6 +70,46 @@ int is_container_type(node_t *node) {
         (node->type >= STATEMENT_LIST && node->type <= DECLARATION_LIST);
 }
 
+void inherit_children(node_t *root, node_t *child) {
+    /* We assume `child` exists in root->children */
+    int j;
+    for (j = 0; j <= root->n_children; j++) {
+        if (root->children[j] == child) {
+            break;
+        }
+    }
+    if (j == root->n_children) {
+        fprintf(stderr, "`child` is not a direct child of root; unable to move.");
+        exit(1);
+    }
+    int N = root->n_children + child->n_children - 1;
+
+    switch (child->n_children) {
+        case 0:
+            return;
+        case 1:
+            root->children[j] = child->children[0];
+            break;
+        default:
+            root->children[j] = child->children[0];
+            root->children = realloc(
+                root->children, 
+                sizeof(node_t*) * N
+            );
+            if (root->children == NULL) { fprintf(stderr, "Unable to realloc."); exit(1); }
+            // Order matters! We need to put the nodes in sequential order where
+            // `child` will be replaced, otherwise we may change the order of statements.
+            for (int i = 1; i < child->n_children; i++) {
+                if (j + i < root->n_children) {
+                    root->children[root->n_children++] =  root->children[j+i];
+                }
+                root->children[j + i] = child->children[i];
+            }
+            root->n_children = N;
+            break;
+    }
+}
+
 void
 simplify_tree ( node_t **simplified, node_t *root )
 {
@@ -80,36 +120,6 @@ simplify_tree ( node_t **simplified, node_t *root )
         }
     }
 
-    // 4.2 -- flattening list structure
-    if (is_container_type(root)) {
-        for (int j = 0; j < root->n_children; j++) {
-            node_t *child = root->children[j];
-            if (child->type == root->type) {  // steal its children
-                switch (child->n_children) {
-                    case 0:
-                        fprintf(stderr, "Expected at least one child.");
-                        exit(1);
-                    case 1:
-                        root->children[j] = child->children[0];
-                        node_finalize(child);
-                        break;
-                    default:
-                        root->children[j] = child->children[0];
-                        root->children = realloc(
-                            root->children, 
-                            sizeof(node_t*) * (root->n_children + child->n_children - 1)
-                        );
-                        if (root->children == NULL) { fprintf(stderr, "Unable to realloc."); exit(1); }
-                        for (int j = 1; j < child->n_children; j++) {
-                            root->children[root->n_children++] = child->children[j];
-                        }
-                        node_finalize(child);
-                        break;
-                }
-            }
-        }
-    }
-
     // 4.2 print statement
     if ( root->type == PRINT_STATEMENT) {
         if (root->n_children != 1) {
@@ -117,11 +127,8 @@ simplify_tree ( node_t **simplified, node_t *root )
             exit(1);
         }
         node_t *child = root->children[0];
-        root->children = child->children;
-        root->n_children = child->n_children;
-        // we don't want to `node_finalize` because root has 'taken over'
-        // the child->children pointer.
-        free(child->data); free(child);
+        inherit_children(root, child);
+        node_finalize(child);
     }
 
     // 4.1 remove purely syntactic values
@@ -136,10 +143,22 @@ simplify_tree ( node_t **simplified, node_t *root )
             || ((root->type == PARAMETER_LIST) && (child->type == VARIABLE_LIST))
            )
         {
-            root->children[i] = child->children[0];
+            inherit_children(root, child);
             node_finalize(child);
         }
     }
+
+    // 4.2 -- flattening list structure
+    if (is_container_type(root)) {
+        for (int j = 0; j < root->n_children; j++) {
+            node_t *child = root->children[j];
+            if (child->type == root->type) {
+                inherit_children(root, child);
+                node_finalize(child);
+            }
+        }
+    }
+
 
     // 4.3 Resolve constant arithmetic expressions
     if ( root->type == EXPRESSION
