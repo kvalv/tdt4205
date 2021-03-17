@@ -125,11 +125,17 @@ simplify_tree ( node_t **simplified, node_t *root )
     }
 
     // 4.1 remove purely syntactic values
-    // I am not sure whether `BLOCK` and `GLOBAL` should also be removed
     for ( int i =0 ; i < root->n_children; i++) {
         node_t *child = root->children[i];
         if (child == NULL) { continue; }
-        if (child->type == EXPRESSION && child->data == NULL) {
+        if (   (child->type == EXPRESSION && child->data == NULL && child->n_children == 1)
+            || (child->type == STATEMENT)
+            || (child->type == GLOBAL_LIST)
+            || (child->type == GLOBAL)
+            || (child->type == DECLARATION_LIST)
+            || ((root->type == PARAMETER_LIST) && (child->type == VARIABLE_LIST))
+           )
+        {
             root->children[i] = child->children[0];
             node_finalize(child);
         }
