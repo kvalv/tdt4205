@@ -129,17 +129,23 @@ simplify_tree ( node_t **simplified, node_t *root )
         }
     }
 
-    // 4.3
+    // 4.3 Resolve constant arithmetic expressions
     if ( root->type == EXPRESSION
          && root->n_children == 2
          && root->children[0]->type == NUMBER_DATA
          && root->children[1]->type == NUMBER_DATA) {
         root->type = NUMBER_DATA;
         root->n_children = 0;
-        // this is horrible code, isn't it?
-        int v1 = *((int*) root->children[0]->data);
-        int v2 = *((int*) root->children[1]->data);
-        *(int*)root->data = v1+v2;
+        int *left = root->children[0]->data;
+        int *right = root->children[1]->data;
+        int *result = root->data;
+        char *symbol = root->data;
+        switch (*symbol) {
+            case '+': *result = *left + *right; break;
+            case '-': *result = *left - *right; break;
+            case '*': *result = *left * *right; break;
+            case '/': *result = *left / *right; break;
+        }
     }
 
     *simplified = root;
