@@ -101,7 +101,7 @@ void inherit_children(node_t *root, node_t *child) {
             // `child` will be replaced, otherwise we may change the order of statements.
             for (int i = 1; i < child->n_children; i++) {
                 if (j + i < root->n_children) {
-                    root->children[root->n_children + i - 1] =  root->children[j+i];
+                    root->children[root->n_children++] =  root->children[j+i];
                 }
                 root->children[j + i] = child->children[i];
             }
@@ -127,8 +127,11 @@ simplify_tree ( node_t **simplified, node_t *root )
             exit(1);
         }
         node_t *child = root->children[0];
-        inherit_children(root, child);
-        node_finalize(child);
+        root->children = child->children;
+        root->n_children = child->n_children;
+        // we don't want to `node_finalize` because root has 'taken over'
+        // the child->children pointer.
+        free(child->data); free(child);
     }
 
     // 4.1 remove purely syntactic values
@@ -153,6 +156,7 @@ simplify_tree ( node_t **simplified, node_t *root )
         for (int j = 0; j < root->n_children; j++) {
             node_t *child = root->children[j];
             if (child->type == root->type) {
+                //root->children[j] = child;
                 inherit_children(root, child);
                 node_finalize(child);
             }
