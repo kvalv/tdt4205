@@ -66,8 +66,16 @@ destroy_subtree ( node_t *discard )
 
 //TODO: Implement simplify_tree.
 int is_container_type(node_t *node) {
-    return node->type == GLOBAL_LIST || 
-        (node->type >= STATEMENT_LIST && node->type <= DECLARATION_LIST);
+    return (
+           node->type == GLOBAL_LIST
+        || node->type == STATEMENT_LIST
+        || node->type == PRINT_LIST
+        || node->type == EXPRESSION_LIST
+        || node->type == VARIABLE_LIST
+        || node->type == ARGUMENT_LIST
+        || node->type == PARAMETER_LIST
+        || node->type == DECLARATION_LIST
+    );
 }
 
 void inherit_children(node_t *root, node_t *child) {
@@ -170,7 +178,6 @@ simplify_tree ( node_t **simplified, node_t *root )
          && root->children[0]->type == NUMBER_DATA
          && root->children[1]->type == NUMBER_DATA) {
         root->type = NUMBER_DATA;
-        root->n_children = 0;
         int *left = root->children[0]->data;
         int *right = root->children[1]->data;
         int *result = root->data;
@@ -183,6 +190,9 @@ simplify_tree ( node_t **simplified, node_t *root )
         }
         node_finalize(root->children[0]);
         node_finalize(root->children[1]);
+        free(root->children);
+        root->children = NULL;
+        root->n_children = 0;
     }
 
     *simplified = root;
