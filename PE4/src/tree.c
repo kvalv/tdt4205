@@ -101,7 +101,7 @@ void inherit_children(node_t *root, node_t *child) {
             // `child` will be replaced, otherwise we may change the order of statements.
             for (int i = 1; i < child->n_children; i++) {
                 if (j + i < root->n_children) {
-                    root->children[root->n_children++] =  root->children[j+i];
+                    root->children[root->n_children + i - 1] =  root->children[j+i];
                 }
                 root->children[j + i] = child->children[i];
             }
