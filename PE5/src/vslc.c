@@ -18,6 +18,7 @@ main ( int argc, char **argv )
     simplify_tree ( &root, root );
     node_print ( root, 0 );
     // call function to create symbol table
+    create_symbol_table();
 	// then call function to print symbol table
     destroy_subtree ( root );
 	// call function to destroy symbol table

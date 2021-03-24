@@ -19,6 +19,10 @@ void destroy_symtab(void);
 void
 create_symbol_table ( void )
 {
+  if ( global_names == NULL ) {
+      global_names = malloc( sizeof (tlhash_t) );
+      tlhash_init(global_names, 25);
+  }
   find_globals();
   size_t n_globals = tlhash_size ( global_names );
   symbol_t *global_list[n_globals];
@@ -139,9 +143,61 @@ destroy_symbol_table ( void )
 }
 
 
+symbol_t* mksym(node_t *n, symtype_t type) {
+    symbol_t* sym = malloc(sizeof(symbol_t));
+    sym->name = n->data;
+    sym->node = n;
+    sym->type = type;
+    sym->seq = 0;
+    sym->nparms = 0;
+    sym->locals = NULL;
+    return sym;
+}
+
+void insert_global_function(node_t *node) {
+    char *key = node->children[0]->data;
+    symbol_t *sym = mksym(node, SYM_FUNCTION);
+    sym->name = key;
+    tlhash_insert(global_names, key, strlen(key) + 1, sym);
+
+    tlhash_t *locals = malloc(sizeof(tlhash_t));
+    tlhash_init(locals, 5);
+    sym->locals = locals;
+    node_t *var_list = node->children[1];
+    if (var_list != NULL) {
+        for (int i=0; i < var_list->n_children; i++) {
+            node_t *param = var_list->children[i];
+            tlhash_insert(locals, param->data, strlen(param->data) + 1, mksym(param, SYM_PARAMETER));
+            sym->nparms++;
+        }
+    }
+}
+
+void insert_global_variable(node_t *node) {
+    char *key = node->data;
+    tlhash_insert(global_names, key, strlen(key) + 1, mksym(node, SYM_GLOBAL_VAR));
+}
+
 void
 find_globals ( void )
 {
+    node_t *global_list = root->children[0];
+    for (int i=0; i < global_list->n_children; i++){ 
+        node_t* child = global_list->children[i];
+        switch (child->type) {
+            case FUNCTION:
+                insert_global_function(child);
+                break;
+            case DECLARATION:
+                // DECLARATION -> VARIABLE_LIST -> [identifier_0, identifier_1, ...]
+                // --> grandchildren of current node would be the nodes we're
+                // looking for.
+                for (int j = 0; j < child->children[0]->n_children; j++) {
+                    insert_global_variable(child->children[0]->children[j]);
+                }
+                break;
+        }
+    }
 }
 
 void
