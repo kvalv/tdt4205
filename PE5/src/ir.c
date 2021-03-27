@@ -158,24 +158,17 @@ void insert_global_function(node_t *node) {
     char *key = node->children[0]->data;
     symbol_t *sym = mksym(node, SYM_FUNCTION);
     sym->name = key;
-    tlhash_insert(global_names, key, strlen(key) + 1, sym);
-
-    tlhash_t *locals = malloc(sizeof(tlhash_t));
-    tlhash_init(locals, 5);
-    sym->locals = locals;
-    node_t *var_list = node->children[1];
-    if (var_list != NULL) {
-        for (int i=0; i < var_list->n_children; i++) {
-            node_t *param = var_list->children[i];
-            tlhash_insert(locals, param->data, strlen(param->data) + 1, mksym(param, SYM_PARAMETER));
-            sym->nparms++;
-        }
+    if ( (tlhash_insert(global_names, key, strlen(key) + 1, sym)) != 0 ) {
+        fprintf(stderr, "unable to insert\n"); exit(1);
     }
+
 }
 
 void insert_global_variable(node_t *node) {
     char *key = node->data;
-    tlhash_insert(global_names, key, strlen(key) + 1, mksym(node, SYM_GLOBAL_VAR));
+    if ( (tlhash_insert(global_names, key, strlen(key) + 1, mksym(node, SYM_GLOBAL_VAR))) != 0) {
+        fprintf(stderr, "unable to insert\n"); exit(1);
+    }
 }
 
 void
@@ -203,6 +196,30 @@ find_globals ( void )
 void
 bind_names ( symbol_t *function, node_t *root )
 {
+
+    tlhash_t *locals = malloc(sizeof(tlhash_t));
+    tlhash_init(locals, 5);
+    function->locals = locals;
+    node_t *var_list = root->children[1];
+    if (var_list != NULL) {
+        for (int i=0; i < var_list->n_children; i++) {
+            node_t *param = var_list->children[i];
+            tlhash_insert(locals, param->data, strlen(param->data) + 1, mksym(param, SYM_PARAMETER));
+            function->nparms++;
+        }
+    }
+    node_t *block = root->children[2];
+    if (block->n_children > 0 && block->children[0]->type == DECLARATION_LIST) {
+        node_t* declaration_list = block->children[0];
+        for (int i = 0; i < declaration_list->n_children; i++) {
+            var_list = declaration_list->children[i]->children[0];  // DECL -> VARIABLE_LIST
+            for (int j = 0; j < var_list->n_children; j++) {
+                node_t *identifier = var_list->children[j];
+                tlhash_insert(locals, identifier->data, strlen(identifier->data) + 1, mksym(identifier, SYM_LOCAL_VAR));
+            }
+        }
+    }
+
 }
 
 void
