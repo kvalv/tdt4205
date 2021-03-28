@@ -1,4 +1,5 @@
 #include <vslc.h>
+#include "search.h"
 
 // Externally visible, for the generator
 extern tlhash_t *global_names;
@@ -148,21 +149,22 @@ symbol_t *mksym(node_t *n, symtype_t type)
     return sym;
 }
 
-void insert_global_function(node_t *node)
+void insert_global_function(node_t *node, int seq)
 {
-    char *key = node->children[0]->data;
+    char *func_name = node->children[0]->data;
     symbol_t *sym = mksym(node, SYM_FUNCTION);
-    sym->name = key;
-    if ( (tlhash_insert(global_names, key, strlen(key) + 1, sym)) != 0 ) {
+    sym->name = func_name;
+    sym->seq = seq;
+    if ( (tlhash_insert(global_names, func_name, strlen(func_name) + 1,
+                        sym)) != 0 ) {
         fprintf(stderr, "unable to insert\n"); exit(1);
     }
 
 }
 
-void insert_global_variable(node_t *node)
+void insert_global_variable(node_t *node, int key)
 {
-    char *key = node->data;
-    if ( (tlhash_insert(global_names, key, strlen(key) + 1, mksym(node,
+    if ( (tlhash_insert(global_names, &key, 1, mksym(node,
                         SYM_GLOBAL_VAR))) != 0) {
         fprintf(stderr, "unable to insert\n"); exit(1);
     }
@@ -172,23 +174,113 @@ void
 find_globals ( void )
 {
     node_t *global_list = root->children[0];
+    int nfuncs = 0;
     for (int i = 0; i < global_list->n_children; i++) {
         node_t *child = global_list->children[i];
         switch (child->type) {
         case FUNCTION:
-            insert_global_function(child);
+            insert_global_function(child, nfuncs);
+            nfuncs ++;
             break;
         case DECLARATION:
-            // DECLARATION -> VARIABLE_LIST -> [identifier_0, identifier_1, ...]
-            // --> grandchildren of current node would be the nodes we're
-            // looking for.
             for (int j = 0; j < child->children[0]->n_children; j++) {
-                insert_global_variable(child->children[0]->children[j]);
+                insert_global_variable(child->children[0]->children[j], j);
             }
             break;
         }
     }
 }
+
+
+void string_to_global_literal_index(node_t *node)
+{
+    //NOT_NULL(123)
+    if (node->type !=  STRING_DATA) {
+        fprintf(stderr, "Expected STRING_DATA type\n"); exit(1);
+    }
+    if ( string_list == NULL ) {
+        string_list = calloc(n_string_list, sizeof(char *));
+    }
+    if (n_string_list <= stringc - 1) {
+        string_list = realloc(string_list, n_string_list * 2 * sizeof(char *));
+        n_string_list *= 2;
+    }
+    char *s = node->data;
+    size_t *index = malloc(sizeof(size_t));
+    *index = stringc;
+    string_list[stringc++] = s;
+    node->data = index;
+}
+
+void bind_local_variables(node_t *node, symbol_t *function,
+                          tlhash_t **scope_stack, size_t size)
+{
+    node_t *root = node;
+    if (node == NULL) {
+        return;
+    }
+    if (node->type == BLOCK) {
+        tlhash_t *local_scope = malloc(sizeof(tlhash_t));
+        if ((tlhash_init(local_scope, 5)) != TLHASH_SUCCESS) {
+            fprintf(stderr, "could not init tlhash\n"); exit(1);
+        };
+
+        // declarations can only happen first in the block so it's
+        // sufficient to just check the first children.
+        node_t statements;
+        if (node->children[0]->type == DECLARATION_LIST) {
+            search_result_t *res = result_init(2);
+            node_index_t seq[] = {IDENTIFIER_DATA};
+            search_for_sequence(node->children[0], res, seq, 1);
+            for (int i = 0; i < res->size; i++) {
+                node_t *var = res->matches[i]->last;
+                symbol_t *s = mksym(var, SYM_LOCAL_VAR);
+                int key = tlhash_size(function->locals) - function->nparms;
+                s->seq = key;
+                int r = tlhash_insert(local_scope, s->name, strlen(s->name) + 1, s);
+                r |= tlhash_insert(function->locals, &key, 1, s);
+                if (r != 0) {
+                    exit(1);
+                }
+            }
+            scope_stack[size++] = local_scope;
+            root = node->children[1];
+        } else {
+            root = node->children[0];
+        }
+    }
+
+    for (int i = 0; i < root->n_children; i++) {
+        node_t *n = root->children[i];
+        if ( n == NULL ) {
+            continue;
+        }
+
+        if (n->type == IDENTIFIER_DATA) {
+            char *key = n->data;
+            symbol_t sym;
+            symbol_t *x = &sym;
+
+            int r = 0;
+            for (int j = size - 1; j >= 0; j--) {
+                r = tlhash_lookup(scope_stack[j], key, strlen(key) + 1, (void **) &x);
+                if  (r == TLHASH_SUCCESS) {
+                    break;
+                }
+            }
+            if (x == NULL) {
+                printf("Undefined variable: %s\n", n->data);
+                exit(1);
+            } else {
+                n->entry = x;
+            }
+
+        } else {
+            bind_local_variables(n, function, scope_stack, size);
+        }
+    }
+}
+
 
 void
 bind_names ( symbol_t *function, node_t *root )
@@ -197,30 +289,46 @@ bind_names ( symbol_t *function, node_t *root )
     tlhash_t *locals = malloc(sizeof(tlhash_t));
     tlhash_init(locals, 5);
     function->locals = locals;
-    node_t *var_list = root->children[1];
-    if (var_list != NULL) {
-        for (int i = 0; i < var_list->n_children; i++) {
-            node_t *param = var_list->children[i];
-            tlhash_insert(locals, param->data, strlen(param->data) + 1, mksym(param,
-                          SYM_PARAMETER));
-            function->nparms++;
-        }
+
+    search_result_t res = {};
+    res.capacity = 2;
+    res.matches = malloc(sizeof(search_match_t) * res.capacity);
+
+    // --- function parameters ---
+    node_index_t param_sequence[] = {FUNCTION, VARIABLE_LIST, IDENTIFIER_DATA};
+    search_for_sequence(root, &res, param_sequence, 3);
+    for (int i = 0; i < res.size; i++) {
+        node_t *node = res.matches[i]->last;
+        symbol_t *s = mksym(node, SYM_PARAMETER);
+        s->seq = function->nparms++;
+        tlhash_insert(locals, node->data,  strlen(node->data) + 1, s);
     }
-    node_t *block = root->children[2];
-    if (block->n_children > 0 && block->children[0]->type == DECLARATION_LIST) {
-        node_t *declaration_list = block->children[0];
-        for (int i = 0; i < declaration_list->n_children; i++) {
-            var_list =
-                declaration_list->children[i]->children[0];  // DECL -> VARIABLE_LIST
-            for (int j = 0; j < var_list->n_children; j++) {
-                node_t *identifier = var_list->children[j];
-                tlhash_insert(locals, identifier->data, strlen(identifier->data) + 1,
-                              mksym(identifier, SYM_LOCAL_VAR));
-            }
-        }
+
+    // --- function strings ---
+    node_index_t string_sequence[] = {STRING_DATA};
+    res.size = 0;
+    search_for_sequence(root, &res, string_sequence, 1);
+    for (int i = 0; i < res.size; i++) {
+        node_t *node = res.matches[i]->last;
+        string_to_global_literal_index(node);
+    }
+
+    // --- local variables ---
+    node_index_t block_sequence[] = {BLOCK};
+    res.size = 0;
+    search_for_sequence(root, &res, block_sequence, 1);
+
+    tlhash_t **scope_stack = malloc(sizeof(tlhash_t) * 10);
+    scope_stack[0] = global_names;
+    scope_stack[1] = function->locals;
+
+    for (int i = 0; i < root->n_children; i++) {
+        node_t *child = root->children[i];
+        bind_local_variables(child, function, scope_stack, 2);
     }
 
 }
+
 
 void
 destroy_symtab ( void )
