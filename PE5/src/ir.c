@@ -17,6 +17,17 @@ void find_globals(void);
 void bind_names(symbol_t *function, node_t *root);
 void destroy_symtab(void);
 
+size_t n_global_funcs;
+size_t n_global_variables;
+
+int _comp(const void* e1, const void* e2) {
+    const symbol_t *p1 = *(symbol_t**) e1;
+    const symbol_t *p2 = *(symbol_t**) e2;
+    if (p1->seq < p2->seq) { return -1;}
+    if (p1->seq > p2->seq) {return 1 ;}
+    return 0;
+}
+
 void
 create_symbol_table ( void )
 {
@@ -28,9 +39,21 @@ create_symbol_table ( void )
     size_t n_globals = tlhash_size ( global_names );
     symbol_t *global_list[n_globals];
     tlhash_values ( global_names, (void **)&global_list );
-    for ( size_t i = 0; i < n_globals; i++ )
-        if ( global_list[i]->type == SYM_FUNCTION )
+
+    // tlhash_values does not store the functions in the `seq` order (i.e. the
+    // order they are parsed). Therefore, for strings we don't get the same
+    // index as in the `*.tree` files. To fix this, we call bind_names in the
+    // order of the sym->seq value.
+    qsort(global_list, n_globals, sizeof(symbol_t*), _comp);
+
+    printf("nglobals=%d\n", n_globals);
+    for ( size_t i = 0; i < n_globals; i++ ) {
+        if ( global_list[i]->type == SYM_FUNCTION ) {
             bind_names ( global_list[i], global_list[i]->node );
+            printf("binding i=%d seq=%d func=%s\n", i, global_list[i]->seq, global_list[i]->node->children[0]->data);
+        }
+    }
+
 }
 
 
@@ -157,7 +180,7 @@ void insert_global_function(node_t *node, int seq)
     sym->seq = seq;
     if ( (tlhash_insert(global_names, func_name, strlen(func_name) + 1,
                         sym)) != 0 ) {
-        fprintf(stderr, "unable to insert\n"); exit(1);
+        fprintf(stderr, "unable to insert function\n"); exit(1);
     }
 
 }
@@ -166,7 +189,7 @@ void insert_global_variable(node_t *node, int key)
 {
     if ( (tlhash_insert(global_names, &key, 1, mksym(node,
                         SYM_GLOBAL_VAR))) != 0) {
-        fprintf(stderr, "unable to insert\n"); exit(1);
+        fprintf(stderr, "unable to insert variable\n"); exit(1);
     }
 }
 
@@ -174,17 +197,15 @@ void
 find_globals ( void )
 {
     node_t *global_list = root->children[0];
-    int nfuncs = 0;
     for (int i = 0; i < global_list->n_children; i++) {
         node_t *child = global_list->children[i];
         switch (child->type) {
         case FUNCTION:
-            insert_global_function(child, nfuncs);
-            nfuncs ++;
+            insert_global_function(child, n_global_funcs++);
             break;
         case DECLARATION:
             for (int j = 0; j < child->children[0]->n_children; j++) {
-                insert_global_variable(child->children[0]->children[j], j);
+                insert_global_variable(child->children[0]->children[j], n_global_variables++);
             }
             break;
         }
@@ -220,13 +241,17 @@ void bind_local_variables(node_t *node, symbol_t *function,
         return;
     }
     if (node->type == BLOCK) {
-        tlhash_t *local_scope = malloc(sizeof(tlhash_t));
-        if ((tlhash_init(local_scope, 5)) != TLHASH_SUCCESS) {
+
+        // a new BLOCK means a new local variable scope. Allocate it
+        // on the stack so the local_scope automatically gets removed
+        // once we leave the block.
+        tlhash_t local_scope = {};
+        if ((tlhash_init(&local_scope, 5)) != TLHASH_SUCCESS) {
             fprintf(stderr, "could not init tlhash\n"); exit(1);
         };
 
         // declarations can only happen first in the block so it's
-        // sufficient to just check the first children.
+        // sufficient to just check the first child.
         node_t statements;
         if (node->children[0]->type == DECLARATION_LIST) {
             search_result_t *res = result_init(2);
@@ -235,15 +260,15 @@ void bind_local_variables(node_t *node, symbol_t *function,
             for (int i = 0; i < res->size; i++) {
                 node_t *var = res->matches[i]->last;
                 symbol_t *s = mksym(var, SYM_LOCAL_VAR);
-                int key = tlhash_size(function->locals) - function->nparms;
-                s->seq = key;
-                int r = tlhash_insert(local_scope, s->name, strlen(s->name) + 1, s);
-                r |= tlhash_insert(function->locals, &key, 1, s);
+                int seq = tlhash_size(function->locals) - function->nparms;
+                s->seq = seq;
+                int r = tlhash_insert(&local_scope, s->name, strlen(s->name) + 1, s);
+                r |= tlhash_insert(function->locals, &seq, 1, s);
                 if (r != 0) {
-                    exit(1);
+                    fprintf(stderr, "Unable to insert key.\n"); exit(1);
                 }
             }
-            scope_stack[size++] = local_scope;
+            scope_stack[size++] = &local_scope;
             root = node->children[1];
         } else {
             root = node->children[0];
@@ -262,7 +287,8 @@ void bind_local_variables(node_t *node, symbol_t *function,
             symbol_t *x = &sym;
 
             int r = 0;
-            for (int j = size - 1; j >= 0; j--) {
+            int j;
+            for (j = size - 1; j >= 0; j--) {
                 r = tlhash_lookup(scope_stack[j], key, strlen(key) + 1, (void **) &x);
                 if  (r == TLHASH_SUCCESS) {
                     break;
@@ -314,18 +340,11 @@ bind_names ( symbol_t *function, node_t *root )
     }
 
     // --- local variables ---
-    node_index_t block_sequence[] = {BLOCK};
-    res.size = 0;
-    search_for_sequence(root, &res, block_sequence, 1);
-
     tlhash_t **scope_stack = malloc(sizeof(tlhash_t) * 10);
     scope_stack[0] = global_names;
     scope_stack[1] = function->locals;
-
-    for (int i = 0; i < root->n_children; i++) {
-        node_t *child = root->children[i];
-        bind_local_variables(child, function, scope_stack, 2);
-    }
+    node_t *block = root->children[2];
+    bind_local_variables(block, function, scope_stack, 2);
 
 }
 
@@ -333,4 +352,6 @@ bind_names ( symbol_t *function, node_t *root )
 void
 destroy_symtab ( void )
 {
+    tlhash_finalize( global_names );
+    free(global_names);
 }
