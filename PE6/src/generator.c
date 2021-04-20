@@ -24,6 +24,24 @@ generate_stringtable ( void )
 
 }
 
+static void
+generate_global_variables ( void )
+{
+    /* Task b */ 
+    puts ( ".data" );
+
+    symbol_t** elems = calloc(tlhash_size(global_names), sizeof(tlhash_element_t));
+    tlhash_values(global_names, (void**) elems);
+    for (int i=0; i < tlhash_size(global_names); i++) {
+        symbol_t *sym = elems[i];
+        if (sym != NULL && sym->type == SYM_GLOBAL_VAR) {
+            printf ("_%-10s .zero 8\n", sym->name);
+        }
+    }
+    free(elems);
+}
+
+
 
 static void
 generate_main ( symbol_t *first )
@@ -79,6 +97,7 @@ void
 generate_program ( void )
 {
     generate_stringtable();
+    generate_global_variables();
 
     /* Put some dummy stuff to keep the skeleton from crashing */
     puts ( ".globl main" );
