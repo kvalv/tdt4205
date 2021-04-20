@@ -1,9 +1,0 @@
-def gcd( a, b )
-begin
-    var g
-    if b > 0 then
-        g := gcd ( b, a - ((a/b)*b) )
-    else
-        g := a
-    return g
-end
