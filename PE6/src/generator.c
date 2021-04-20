@@ -41,6 +41,44 @@ generate_global_variables ( void )
     free(elems);
 }
 
+static void
+generate_global_function ( symbol_t *func  )
+{
+
+    printf("_%s:\n", func->name);  // _main: 
+    puts ( "\tmovq %rsp, %rbp" );
+
+    if (func->nparms % 2 == 1) {
+        puts("\tsubq $8, %rsp");
+    }
+
+    puts ( "\tpushq %rbp" );
+
+    for (int i=0; i < func->nparms; i++) {
+        // TODO: support > 6 args
+        printf("\tpushq %s\n", record[i]);
+    }
+
+    // recursive search here. Handle prints,
+    // expressions, ...
+
+}
+
+static void
+generate_global_functions( void )
+{
+    symbol_t** elems = calloc(tlhash_size(global_names), sizeof(tlhash_element_t));
+    tlhash_values(global_names, (void**) elems);
+    for (int i=0; i < tlhash_size(global_names); i++) {
+        symbol_t *sym = elems[i];
+        if (sym != NULL && sym->type == SYM_FUNCTION) {
+            generate_global_function(sym);
+        }
+    }
+    free(elems);
+}
+
+
 
 
 static void
@@ -84,7 +122,7 @@ generate_main ( symbol_t *first )
     printf ( "\tcall\t_%s\n", first->name );
     puts ( "\tjmp END" );
     puts ( "ABORT:" );
-    puts ( "\tmovq $errout, %rdi" );
+    puts ( "\tleaq errout(%rip), %rdi" );
     puts ( "\tcall puts" );
 
     puts ( "END:" );
@@ -97,12 +135,20 @@ void
 generate_program ( void )
 {
     generate_stringtable();
-    generate_global_variables();
+    // generate_global_variables();
 
-    /* Put some dummy stuff to keep the skeleton from crashing */
-    puts ( ".globl main" );
-    puts ( ".text" );
-    puts ( "main:" );
-    puts ( "\tmovq $0, %rax" );
-    puts ( "\tcall exit" );
+    symbol_t f;
+    symbol_t *pf = &f;
+    tlhash_lookup(global_names, "main", strlen("main"), (void**) &pf);
+    generate_main(pf);
+
+    generate_global_functions();
+
+    /* /1* Put some dummy stuff to keep the skeleton from crashing *1/ */
+    /* puts ( ".text" ); */
+    /* puts ( ".globl main" ); */
+    /* puts ( "main:" ); */
+    /* puts ( "\tcall _hello" ); */
+    /* puts ( "\tret" ); */
+
 }
