@@ -1,4 +1,3 @@
-#include "tlhash.h"
 #include "vslc.h"
 
 #define MIN(a,b) (((a)<(b)) ? (a):(b))
@@ -55,6 +54,45 @@ arithmetic_expression ( node_t* op ) {
 }
 
 static void
+expand_expression(symbol_t *func, node_t *root) {
+    if (root->type == EXPRESSION) {
+        node_t *left = root->children[0];
+        node_t *right = root->children[1];
+        expand_expression(func, left);
+        puts("\tpushq %rax");
+        expand_expression(func, right);
+        char* op = root->data;
+        puts("\tpopq %r10");
+        if (strcmp(op, "+") == 0) {
+            puts("\taddq %r10, %rax");
+        } else if (strcmp(op, "-") == 0) {
+            puts("\tsubq %r10, %rax");
+        } else if (strcmp(op, "/") == 0) {
+            fprintf(stderr, "not supported / ");exit(1);
+            // TODO
+        } else if (strcmp(op, "*") == 0) {
+            // TODO
+            fprintf(stderr, "not supported * ");exit(1);
+        }
+    } else if (root->type == IDENTIFIER_DATA) {
+        symbol_t *param;
+        int offset;
+        if ((tlhash_lookup(func->locals, root->data, strlen(root->data), (void*) &param)) == TLHASH_SUCCESS) {
+            offset = -16 - 8 * param->seq;
+        } else {
+            // TODO
+            //perror("unhandled"); exit(1);
+        }
+        printf("\tmovq %d(%%rbp), %%rsi  # get %s\n", offset, root->data);
+    } else if (root->type == NUMBER_DATA) {
+        int *v = root->data;
+        printf("\tmovq $%d, %%rax\n", *v);
+    }
+
+    
+}
+
+static void
 expand_print_statement (symbol_t* func, node_t *root ) {
     for (int i=0; i < root->n_children; i++) {
         node_t *child = root->children[i];
@@ -77,6 +115,11 @@ expand_print_statement (symbol_t* func, node_t *root ) {
             }
             printf("\tmovq %d(%%rbp), %%rsi\n", offset);
             puts ( "\tleaq intout(%rip), %rdi" );
+        } else if (child->type == EXPRESSION) {
+            printf("DEBUG -- expression call...\n");
+            puts ( "\tleaq intout(%rip), %rdi" );
+            expand_expression(func, child);
+            puts("\tmovq %rax, %rsi");
         }
         printf("\tcall printf\n");
     }
