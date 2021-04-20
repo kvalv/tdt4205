@@ -1,3 +1,4 @@
+#include "tlhash.h"
 #include "vslc.h"
 
 #define MIN(a,b) (((a)<(b)) ? (a):(b))
@@ -42,27 +43,108 @@ generate_global_variables ( void )
 }
 
 static void
+arithmetic_expression ( node_t* op ) {
+    // variable --> copy the content to rax
+    // number --> copy to rax
+    // expression1 -> rax -> push to stack
+    // expression2 -> rax -> do OP to other...
+
+    node_t *lhs = op->children[0];
+    node_t *rhs = op->children[1];
+
+}
+
+static void
+expand_print_statement (symbol_t* func, node_t *root ) {
+    for (int i=0; i < root->n_children; i++) {
+        node_t *child = root->children[i];
+        if (child->type == STRING_DATA) {
+            size_t *id = child->data;
+            printf("\tleaq STR%zu(%%rip), %%rsi\n", *id);
+            puts ( "\tleaq strout(%rip), %rdi" );
+        } else if (child->type == NUMBER_DATA) {
+            int *value = child->data;
+            printf("\tmovq $%d, %%rsi\n", *value);
+            puts ( "\tleaq intout(%rip), %rdi" );
+        } else if (child->type == IDENTIFIER_DATA) {
+            symbol_t *param;
+            int offset;
+            if ((tlhash_lookup(func->locals, child->data, strlen(child->data), (void*) &param)) == TLHASH_SUCCESS) {
+                offset = -16 - 8 * param->seq;
+            } else {
+                // TODO
+                perror("unhandled"); exit(1);
+            }
+            printf("\tmovq %d(%%rbp), %%rsi\n", offset);
+            puts ( "\tleaq intout(%rip), %rdi" );
+        }
+        printf("\tcall printf\n");
+    }
+}
+
+static void
 generate_global_function ( symbol_t *func  )
 {
 
     printf("_%s:\n", func->name);  // _main: 
     puts ( "\tmovq %rsp, %rbp" );
 
-    if (func->nparms % 2 == 1) {
-        puts("\tsubq $8, %rsp");
-    }
-
     puts ( "\tpushq %rbp" );
 
     for (int i=0; i < func->nparms; i++) {
         // TODO: support > 6 args
+        printf("DEBUG - adding arg...\n");
         printf("\tpushq %s\n", record[i]);
     }
+
+    if (func->nparms % 2 == 1) {
+        puts("\tpushq $0");
+    }
+
+
+    node_t *decl_list = NULL;
+    node_t *stmt_list = NULL;
+    if (func->node->n_children == 2) {
+        decl_list = func->node->children[0];
+        stmt_list = func->node->children[1];
+    } else {
+        stmt_list = func->node->children[0];
+    }
+
+    expand_print_statement(func, stmt_list->children[0]);
+
+    // recursively call
 
     // recursive search here. Handle prints,
     // expressions, ...
 
+    // one arg provided, let's put that in rsi
+    //puts("\tmovq %rdi %rsi");
+    //puts("\tleaq strout(%rip), %rdi");
+    //puts ( "\tmovq %rsp, %rsi" );
+    //puts ( "\tleaq intout(%rip), %rdi" );
+    //puts ("\tcall printf" );
+    //puts ( "\tcall printf" );
+    //puts ( "\tmovq $'\\n', %rdi" );
+    //puts ( "\tcall putchar" );
+
+    puts ( "\tmovq %rdi, %rax" );
+    puts ( "\tmovq %rbp, %rsp" );
+    puts ( "\tret" );
+
 }
+
+void tlhash_print_keys(tlhash_t *tab) {
+    symbol_t **elems = calloc(tlhash_size(tab), sizeof(tlhash_element_t));
+    tlhash_values(tab, (void**) elems);
+    for (int i=0; i < tlhash_size(tab); i++) {
+        symbol_t *sym = elems[i];
+        printf("sym = %s\n", sym->name);
+    }
+    free(elems);
+}
+
+
 
 static void
 generate_global_functions( void )
