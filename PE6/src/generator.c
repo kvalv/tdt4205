@@ -122,9 +122,20 @@ expand_expression(symbol_t *func, node_t *root) {
         }
         printf("\tcall _%s\n", (char*) callee->data);
     } else if (root->type == EXPRESSION) {
-        node_t *left = root->children[0];
-        node_t *right = root->children[1];
         char* op = root->data;
+        node_t *left = root->children[0];
+        int is_unary = root->n_children == 1;
+        if (is_unary) {
+            if (strcmp(op, "-") == 0) {
+                expand_expression(func, left);
+                puts("negq %rax");
+            } else {
+                fprintf(stderr, "Unknown unary operator.");
+                exit(1);
+            }
+            return;
+        } // else..
+        node_t *right = root->children[1];
         expand_expression(func, left);
         puts("\tpushq %rax");
         expand_expression(func, right);
