@@ -114,7 +114,7 @@ expand_print_statement (symbol_t* func, node_t *root ) {
         }
         printf("\tcall printf\n");
     }
-    puts("\tmovq $'\n', %rdi");
+    puts("\tmovq $'\\n', %rdi");
     puts("\tcall putchar");
 }
 
@@ -127,6 +127,17 @@ expand_expression(symbol_t *func, node_t *root) {
         expand_expression(func, rhs);
         int offset = get_offset(func, lhs);
         printf("\tmovq %%rax, %d(%%rbp)  # assign %s \n", offset, lhs->entry->name);
+    } else if (root->type == EXPRESSION && root->data == NULL) {
+        // -- function call --
+        node_t *callee = root->children[0];
+        node_t *args = root->children[1];
+        if (args != NULL) {
+            for (int i=0; i < args->n_children; i++) {
+                expand_expression(func, args->children[i]);
+                printf("\tmovq %%rax, %s\n", record[i]);
+            }
+        }
+        printf("\tcall _%s\n", (char*) callee->data);
     } else if (root->type == EXPRESSION) {
         node_t *left = root->children[0];
         node_t *right = root->children[1];
@@ -156,11 +167,6 @@ expand_expression(symbol_t *func, node_t *root) {
         expand_print_statement(func, root);
     } else if (root->type == RETURN_STATEMENT) {
         expand_expression(func, root->children[0]);
-        for (int i=0; i < func->nparms + n_local_variables(func); i++) {
-            puts ("\tpopq %r10");
-        }
-        puts ( "\tmovq %rbp, %rsp" );
-        puts ( "\tret" );
     }
 }
 
@@ -170,9 +176,9 @@ generate_global_function ( symbol_t *func  )
 {
 
     printf("_%s:\n", func->name);  // _main: 
+    puts ( "\tpushq %rbp  # store bp" );
     puts ( "\tmovq %rsp, %rbp" );
 
-    puts ( "\tpushq %rbp" );
 
     for (int i=0; i < func->nparms; i++) {
         // TODO: support > 6 args
@@ -199,6 +205,16 @@ generate_global_function ( symbol_t *func  )
     for (int i=0; i < stmt_list->n_children; i++) {
         expand_expression(func, stmt_list->children[i]);
     }
+
+    for (int i=0; i < func->nparms + n_added; i++) {
+        puts ("\tpopq %r10");
+    }
+    if (!is_stack_aligned) {
+        puts ("\tpopq %r10  # pop stack alignment");
+    }
+
+    puts ("\tpopq %rbp");
+    puts ("\tret" );
 
 }
 
@@ -280,6 +296,19 @@ generate_main ( symbol_t *first )
     puts ( "\tcall exit" );
 }
 
+symbol_t* get_main_function() {
+    symbol_t **values = calloc(tlhash_size(global_names), sizeof(symbol_t*));
+    tlhash_values(global_names, (void**) values);
+    for (int i=0; i < tlhash_size(global_names); i++) {
+        symbol_t* sym = values[i];
+        if (sym->seq == 0 && sym->type == SYM_FUNCTION) {
+            return sym;
+        }
+    }
+    free(values);
+    return NULL;
+}
+
 
 void
 generate_program ( void )
@@ -287,11 +316,17 @@ generate_program ( void )
     generate_stringtable();
     // generate_global_variables();
 
-    symbol_t f;
-    symbol_t *pf = &f;
-    tlhash_lookup(global_names, "main", strlen("main"), (void**) &pf);
-    generate_main(pf);
+    //symbol_t f;
+    //symbol_t *pf = &f;
+    //tlhash_lookup(global_names, "main", strlen("main"), (void**) &pf);
+    //generate_main(pf);
+    symbol_t *func = get_main_function();
+    if (func == NULL) {
+        fprintf(stderr, "No main function found.");
+        exit(1);
+    }
 
+    generate_main(func);
     generate_global_functions();
 
     /* /1* Put some dummy stuff to keep the skeleton from crashing *1/ */
