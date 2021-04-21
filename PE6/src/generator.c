@@ -85,8 +85,8 @@ expand_print_statement (symbol_t* func, node_t *root ) {
             puts ( "\tleaq intout(%rip), %rdi" );
         } else if (child->type == EXPRESSION) {
             printf("DEBUG -- expression call...\n");
-            puts ( "\tleaq intout(%rip), %rdi" );
             expand_expression(func, child);
+            puts ( "\tleaq intout(%rip), %rdi" );
             puts("\tmovq %rax, %rsi");
         }
         // copy of %rsp before we do 16-byte alignment. Shamelessly inspired by
