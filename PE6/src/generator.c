@@ -41,21 +41,60 @@ generate_global_variables ( void )
     free(elems);
 }
 
-static void
-arithmetic_expression ( node_t* op ) {
-    // variable --> copy the content to rax
-    // number --> copy to rax
-    // expression1 -> rax -> push to stack
-    // expression2 -> rax -> do OP to other...
-
-    node_t *lhs = op->children[0];
-    node_t *rhs = op->children[1];
-
+int get_offset(symbol_t *func, node_t *root) {
+    symbol_t *param;
+    int offset;
+    if ((tlhash_lookup(func->locals, root->data, strlen(root->data), (void*) &param)) == TLHASH_SUCCESS) {
+        offset = -16 - 8 * param->seq;
+    } else {
+        offset = -16 - 8 * (root->entry->seq + func->nparms);
+        //printf("geting offset! %d -> %d %s\n", root->entry->seq, offset, root->entry->name);
+        // TODO
+        
+        //exit(1);
+    }
+    return offset;
 }
 
 static void
+expand_print_statement (symbol_t* func, node_t *root ) {
+    for (int i=0; i < root->n_children; i++) {
+        node_t *child = root->children[i];
+        if (child->type == STRING_DATA) {
+            size_t *id = child->data;
+            printf("\tleaq STR%zu(%%rip), %%rsi\n", *id);
+            puts ( "\tleaq strout(%rip), %rdi" );
+        } else if (child->type == NUMBER_DATA) {
+            int *value = child->data;
+            printf("\tmovq $%d, %%rsi\n", *value);
+            puts ( "\tleaq intout(%rip), %rdi" );
+        } else if (child->type == IDENTIFIER_DATA) {
+            symbol_t *param;
+            int offset = get_offset(func, child);
+            printf("\tmovq %d(%%rbp), %%rsi\n", offset);
+            puts ( "\tleaq intout(%rip), %rdi" );
+        } else if (child->type == EXPRESSION) {
+            printf("DEBUG -- expression call...\n");
+            puts ( "\tleaq intout(%rip), %rdi" );
+            expand_expression(func, child);
+            puts("\tmovq %rax, %rsi");
+        }
+        printf("\tcall printf\n");
+    }
+    puts("\tmovq $'\n', %rdi");
+    puts("\tcall putchar");
+}
+
+
+void
 expand_expression(symbol_t *func, node_t *root) {
-    if (root->type == EXPRESSION) {
+    if (root->type == ASSIGNMENT_STATEMENT) {
+        node_t *lhs = root->children[0];
+        node_t *rhs = root->children[1];
+        expand_expression(func, rhs);
+        int offset = get_offset(func, lhs);
+        printf("\tmovq %%rax, %d(%%rbp)  # assign %s \n", offset, lhs->entry->name);
+    } else if (root->type == EXPRESSION) {
         node_t *left = root->children[0];
         node_t *right = root->children[1];
         expand_expression(func, left);
@@ -75,54 +114,34 @@ expand_expression(symbol_t *func, node_t *root) {
             fprintf(stderr, "not supported * ");exit(1);
         }
     } else if (root->type == IDENTIFIER_DATA) {
-        symbol_t *param;
-        int offset;
-        if ((tlhash_lookup(func->locals, root->data, strlen(root->data), (void*) &param)) == TLHASH_SUCCESS) {
-            offset = -16 - 8 * param->seq;
-        } else {
-            // TODO
-            //perror("unhandled"); exit(1);
-        }
-        printf("\tmovq %d(%%rbp), %%rsi  # get %s\n", offset, root->data);
+        int offset = get_offset(func, root);
+        printf("\tmovq %d(%%rbp), %%rax  # get %s\n", offset, (char*) root->data);
     } else if (root->type == NUMBER_DATA) {
         int *v = root->data;
         printf("\tmovq $%d, %%rax\n", *v);
+    } else if (root->type == PRINT_STATEMENT){
+        expand_print_statement(func, root);
     }
 
     
 }
 
-static void
-expand_print_statement (symbol_t* func, node_t *root ) {
-    for (int i=0; i < root->n_children; i++) {
-        node_t *child = root->children[i];
-        if (child->type == STRING_DATA) {
-            size_t *id = child->data;
-            printf("\tleaq STR%zu(%%rip), %%rsi\n", *id);
-            puts ( "\tleaq strout(%rip), %rdi" );
-        } else if (child->type == NUMBER_DATA) {
-            int *value = child->data;
-            printf("\tmovq $%d, %%rsi\n", *value);
-            puts ( "\tleaq intout(%rip), %rdi" );
-        } else if (child->type == IDENTIFIER_DATA) {
-            symbol_t *param;
-            int offset;
-            if ((tlhash_lookup(func->locals, child->data, strlen(child->data), (void*) &param)) == TLHASH_SUCCESS) {
-                offset = -16 - 8 * param->seq;
-            } else {
-                // TODO
-                perror("unhandled"); exit(1);
+// returns the number of local variables added to the stack
+size_t push_local_variables_to_stack(symbol_t *func) {
+    symbol_t **elems = calloc(tlhash_size(func->locals), sizeof(symbol_t*));
+    tlhash_values(func->locals, (void**) elems);
+    int found = 0;
+    for (int i=0; i < tlhash_size(func->locals); i++) {
+        symbol_t *sym = elems[i];
+        if (sym->type == SYM_LOCAL_VAR) {
+            if (found == 0) {
+                puts("\tmovq $0, %r10  # zero out register"); 
             }
-            printf("\tmovq %d(%%rbp), %%rsi\n", offset);
-            puts ( "\tleaq intout(%rip), %rdi" );
-        } else if (child->type == EXPRESSION) {
-            printf("DEBUG -- expression call...\n");
-            puts ( "\tleaq intout(%rip), %rdi" );
-            expand_expression(func, child);
-            puts("\tmovq %rax, %rsi");
+            found ++;
+            printf("\tpushq %%r10  # local `%s` to stack\n", sym->name);
         }
-        printf("\tcall printf\n");
     }
+    return found;
 }
 
 static void
@@ -136,12 +155,14 @@ generate_global_function ( symbol_t *func  )
 
     for (int i=0; i < func->nparms; i++) {
         // TODO: support > 6 args
-        printf("DEBUG - adding arg...\n");
-        printf("\tpushq %s\n", record[i]);
+        printf("\tpushq %s  # argument %d\n", record[i], i);
     }
 
-    if (func->nparms % 2 == 1) {
-        puts("\tpushq $0");
+    size_t n_added = push_local_variables_to_stack(func);
+    int is_stack_aligned = (n_added + func->nparms) % 2 == 0;
+
+    if (!is_stack_aligned) {
+        puts("\tpushq $0  # stack alignment");
     }
 
 
@@ -154,22 +175,9 @@ generate_global_function ( symbol_t *func  )
         stmt_list = func->node->children[0];
     }
 
-    expand_print_statement(func, stmt_list->children[0]);
-
-    // recursively call
-
-    // recursive search here. Handle prints,
-    // expressions, ...
-
-    // one arg provided, let's put that in rsi
-    //puts("\tmovq %rdi %rsi");
-    //puts("\tleaq strout(%rip), %rdi");
-    //puts ( "\tmovq %rsp, %rsi" );
-    //puts ( "\tleaq intout(%rip), %rdi" );
-    //puts ("\tcall printf" );
-    //puts ( "\tcall printf" );
-    //puts ( "\tmovq $'\\n', %rdi" );
-    //puts ( "\tcall putchar" );
+    for (int i=0; i < stmt_list->n_children; i++) {
+        expand_expression(func, stmt_list->children[i]);
+    }
 
     puts ( "\tmovq %rdi, %rax" );
     puts ( "\tmovq %rbp, %rsp" );

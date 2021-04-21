@@ -11,3 +11,13 @@ clean:
 	-rm -f src/parser.c src/scanner.c src/*.tab.* src/*.o
 purge: clean
 	-rm -f src/vslc
+
+prog: src/vslc vsl_programs/easy.vsl
+	src/vslc < vsl_programs/easy.vsl | tee 0prog.s 
+	cat 0prog.s | grep -v DEBUG | awk '/.data/,EOF' > prog.s
+	rm 0prog.s
+	as -c -g -o prog.o prog.s
+	cc -o prog prog.o
+
+print: src/vslc
+	src/vslc < vsl_programs/easy.vsl
