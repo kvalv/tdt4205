@@ -41,6 +41,39 @@ generate_global_variables ( void )
     free(elems);
 }
 
+size_t n_local_variables(symbol_t *func) {
+    symbol_t **elems = calloc(tlhash_size(func->locals), sizeof(symbol_t*));
+    tlhash_values(func->locals, (void**) elems);
+    int found = 0;
+    for (int i=0; i < tlhash_size(func->locals); i++) {
+        symbol_t *sym = elems[i];
+        if (sym->type == SYM_LOCAL_VAR) {
+            found ++;
+        }
+    }
+    free(elems);
+    return found;
+}
+
+// returns the number of local variables added to the stack
+size_t push_local_variables_to_stack(symbol_t *func) {
+    symbol_t **elems = calloc(tlhash_size(func->locals), sizeof(symbol_t*));
+    tlhash_values(func->locals, (void**) elems);
+    int found = 0;
+    for (int i=0; i < tlhash_size(func->locals); i++) {
+        symbol_t *sym = elems[i];
+        if (sym->type == SYM_LOCAL_VAR) {
+            if (found == 0) {
+                puts("\tmovq $0, %r10  # zero out register"); 
+            }
+            found ++;
+            printf("\tpushq %%r10  # local `%s` to stack\n", sym->name);
+        }
+    }
+    free(elems);
+    return found;
+}
+
 int get_offset(symbol_t *func, node_t *root) {
     symbol_t *param;
     int offset;
@@ -121,28 +154,16 @@ expand_expression(symbol_t *func, node_t *root) {
         printf("\tmovq $%d, %%rax\n", *v);
     } else if (root->type == PRINT_STATEMENT){
         expand_print_statement(func, root);
-    }
-
-    
-}
-
-// returns the number of local variables added to the stack
-size_t push_local_variables_to_stack(symbol_t *func) {
-    symbol_t **elems = calloc(tlhash_size(func->locals), sizeof(symbol_t*));
-    tlhash_values(func->locals, (void**) elems);
-    int found = 0;
-    for (int i=0; i < tlhash_size(func->locals); i++) {
-        symbol_t *sym = elems[i];
-        if (sym->type == SYM_LOCAL_VAR) {
-            if (found == 0) {
-                puts("\tmovq $0, %r10  # zero out register"); 
-            }
-            found ++;
-            printf("\tpushq %%r10  # local `%s` to stack\n", sym->name);
+    } else if (root->type == RETURN_STATEMENT) {
+        expand_expression(func, root->children[0]);
+        for (int i=0; i < func->nparms + n_local_variables(func); i++) {
+            puts ("\tpopq %r10");
         }
+        puts ( "\tmovq %rbp, %rsp" );
+        puts ( "\tret" );
     }
-    return found;
 }
+
 
 static void
 generate_global_function ( symbol_t *func  )
@@ -178,10 +199,6 @@ generate_global_function ( symbol_t *func  )
     for (int i=0; i < stmt_list->n_children; i++) {
         expand_expression(func, stmt_list->children[i]);
     }
-
-    puts ( "\tmovq %rdi, %rax" );
-    puts ( "\tmovq %rbp, %rsp" );
-    puts ( "\tret" );
 
 }
 
