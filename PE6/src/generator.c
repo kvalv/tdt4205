@@ -124,10 +124,10 @@ expand_expression(symbol_t *func, node_t *root) {
     } else if (root->type == EXPRESSION) {
         node_t *left = root->children[0];
         node_t *right = root->children[1];
+        char* op = root->data;
         expand_expression(func, left);
         puts("\tpushq %rax");
         expand_expression(func, right);
-        char* op = root->data;
         puts("\tpopq %r10");
         if (strcmp(op, "+") == 0) {
             puts("\taddq %r10, %rax");
@@ -135,11 +135,16 @@ expand_expression(symbol_t *func, node_t *root) {
             puts("\tsubq %rax, %r10");
             puts("\tmovq %r10, %rax");
         } else if (strcmp(op, "/") == 0) {
-            fprintf(stderr, "not supported / ");exit(1);
-            // TODO
+            puts("\tmovq $0, %rdx");
+            puts("\tmovq %rax, %r11");
+            puts("\tmovq %r10, %rax");
+            // sign extend since we allow signed multiplication / division.
+            // https://stackoverflow.com/a/10343210/12181179
+            puts("\tcqo");
+            puts("\tidivq %r11");
+            // divide by rax...
         } else if (strcmp(op, "*") == 0) {
-            // TODO
-            fprintf(stderr, "not supported * ");exit(1);
+            puts("\timulq %r10, %rax");
         }
     } else if (root->type == IDENTIFIER_DATA) {
         int offset = get_offset(func, root);
