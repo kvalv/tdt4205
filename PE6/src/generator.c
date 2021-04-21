@@ -55,36 +55,13 @@ size_t n_local_variables(symbol_t *func) {
     return found;
 }
 
-// returns the number of local variables added to the stack
-size_t push_local_variables_to_stack(symbol_t *func) {
-    symbol_t **elems = calloc(tlhash_size(func->locals), sizeof(symbol_t*));
-    tlhash_values(func->locals, (void**) elems);
-    int found = 0;
-    for (int i=0; i < tlhash_size(func->locals); i++) {
-        symbol_t *sym = elems[i];
-        if (sym->type == SYM_LOCAL_VAR) {
-            if (found == 0) {
-                puts("\tmovq $0, %r10  # zero out register"); 
-            }
-            found ++;
-            printf("\tpushq %%r10  # local `%s` to stack\n", sym->name);
-        }
-    }
-    free(elems);
-    return found;
-}
-
 int get_offset(symbol_t *func, node_t *root) {
     symbol_t *param;
     int offset;
     if ((tlhash_lookup(func->locals, root->data, strlen(root->data), (void*) &param)) == TLHASH_SUCCESS) {
-        offset = -16 - 8 * param->seq;
+        offset = - 8 * (1 + param->seq);
     } else {
-        offset = -16 - 8 * (root->entry->seq + func->nparms);
-        //printf("geting offset! %d -> %d %s\n", root->entry->seq, offset, root->entry->name);
-        // TODO
-        
-        //exit(1);
+        offset = - 8 * (1 + root->entry->seq + func->nparms);
     }
     return offset;
 }
@@ -112,7 +89,13 @@ expand_print_statement (symbol_t* func, node_t *root ) {
             expand_expression(func, child);
             puts("\tmovq %rax, %rsi");
         }
+        // copy of %rsp before we do 16-byte alignment. Shamelessly inspired by
+        // https://stackoverflow.com/questions/4175281/what-does-it-mean-to-align-the-stack
+        // %r12 is probably a safe choice too, since it is caller-owned by convention.
+        puts("\tmovq %rsp, %r12"); 
+        puts("\tandq $-16, %rsp");
         printf("\tcall printf\n");
+        puts("\tmovq %r12, %rsp");
     }
     puts("\tmovq $'\\n', %rdi");
     puts("\tcall putchar");
@@ -185,13 +168,8 @@ generate_global_function ( symbol_t *func  )
         printf("\tpushq %s  # argument %d\n", record[i], i);
     }
 
-    size_t n_added = push_local_variables_to_stack(func);
-    int is_stack_aligned = (n_added + func->nparms) % 2 == 0;
-
-    if (!is_stack_aligned) {
-        puts("\tpushq $0  # stack alignment");
-    }
-
+    size_t nbytes_alloc = n_local_variables(func) * 8;
+    printf("\tsubq $%zu, %%rsp  # allocate stack space for local variables\n", nbytes_alloc);
 
     node_t *decl_list = NULL;
     node_t *stmt_list = NULL;
@@ -206,12 +184,8 @@ generate_global_function ( symbol_t *func  )
         expand_expression(func, stmt_list->children[i]);
     }
 
-    for (int i=0; i < func->nparms + n_added; i++) {
-        puts ("\tpopq %r10");
-    }
-    if (!is_stack_aligned) {
-        puts ("\tpopq %r10  # pop stack alignment");
-    }
+    size_t nbytes_dealloc = 8 * func->nparms + nbytes_alloc;
+    printf ("\taddq $%zu, %%rsp # deallocate stack space\n", nbytes_dealloc);
 
     puts ("\tpopq %rbp");
     puts ("\tret" );
