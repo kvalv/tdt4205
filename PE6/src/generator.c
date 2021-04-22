@@ -202,6 +202,48 @@ expand_expression(symbol_t *func, node_t *root) {
             expand_expression(func, else_block);
         }
         printf("%s_ENDIF_%d:\n", func->name, _counter);
+    } else if (root->type == WHILE_STATEMENT) {
+        printf("%s_WHILE_%d:\n", func->name, while_counter);
+
+        node_t *relation = root->children[0];
+        node_t *body = root->children[1];
+
+        int _counter = while_counter;
+        while_counter++;
+
+        printf("%s_WHILELOOP_%d:\n", func->name, _counter);
+        expand_expression(func, relation->children[0]);
+        puts("\tpushq %rax");
+        expand_expression(func, relation->children[1]);
+        puts("\tpopq %r10");
+        puts("\tcmpq %r10, %rax");
+        int *op = relation->data;
+        switch (*op) {
+            case '=':
+                printf("\tjne %s_ENDWHILE_%d\n", func->name, _counter);
+                break;
+            case '<':
+                printf("jle %s_ENDWHILE_%d\n", func->name, _counter);
+                break;
+            case '>':
+                printf("jge %s_ENDWHILE_%d\n", func->name, _counter);
+                break;
+            default:
+                fprintf(stderr, "Not yet implemented");
+                exit(1);
+        }
+        expand_expression(func, body);
+        printf("jmp %s_WHILELOOP_%d\n", func->name, _counter);
+        printf("%s_ENDWHILE_%d:\n", func->name, _counter);
+
+    } else if (root->type == BLOCK) {
+        // we do not care about the declaration list, because we have already
+        // allocated all necessary variables on the stack.
+        node_t *stmt_list = root->n_children == 1 ? root->children[0] : root->children[1];
+        for (int i=0; i < stmt_list->n_children; i++) {
+            node_t *child = stmt_list->children[i];
+            expand_expression(func, child);
+        }
     } else if (root->type == RETURN_STATEMENT) {
         expand_expression(func, root->children[0]);
     }
