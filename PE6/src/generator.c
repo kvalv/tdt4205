@@ -62,7 +62,11 @@ int get_offset(symbol_t *func, node_t *root) {
     symbol_t *param;
     int offset;
     if ((tlhash_lookup(func->locals, root->data, strlen(root->data), (void*) &param)) == TLHASH_SUCCESS) {
-        offset = - 8 * (1 + param->seq);
+        if (param->seq <= 5) {
+            offset = - 8 * (1 + param->seq);
+        } else {
+            offset = (1 + func->nparms - param->seq) * 8;
+        }
     } else {
         offset = - 8 * (1 + root->entry->seq + func->nparms);
     }
@@ -123,10 +127,19 @@ expand_expression(symbol_t *func, node_t *root) {
         if (args != NULL) {
             for (int i=0; i < args->n_children; i++) {
                 expand_expression(func, args->children[i]);
-                printf("\tmovq %%rax, %s\n", record[i]);
+                if ( i < 6 ) {
+                    printf("\tmovq %%rax, %s\n", record[i]);
+                } else {
+                    puts("\tpushq %rax  # arg to stack, since > 6 args provided.");
+                }
             }
         }
         printf("\tcall _%s\n", (char*) callee->data);
+        if (args->n_children > 6) {
+            // caller is responsible for cleaning up arguments 6 and upwards.
+            size_t rest = (args->n_children - 6) * 8;
+            printf("\taddq $%zu, %%rsp # remove 6th,... args from stack\n", rest);
+        }
     } else if (root->type == EXPRESSION) {
         char* op = root->data;
         node_t *left = root->children[0];
@@ -268,8 +281,7 @@ generate_global_function ( symbol_t *func  )
     while_counter = 0;
     return_found = 0;
 
-    for (int i=0; i < func->nparms; i++) {
-        // TODO: support > 6 args
+    for (int i=0; i < MIN(func->nparms, 6); i++) {
         printf("\tpushq %s  # argument %d\n", record[i], i);
     }
 
@@ -290,7 +302,7 @@ generate_global_function ( symbol_t *func  )
         expand_expression(func, stmt);
     }
 
-    size_t nbytes_dealloc = 8 * func->nparms + nbytes_alloc;
+    size_t nbytes_dealloc = 8 * MIN(6, func->nparms) + nbytes_alloc;
     printf ("\taddq $%zu, %%rsp # deallocate stack space\n", nbytes_dealloc);
 
     puts ("\tpopq %rbp");
