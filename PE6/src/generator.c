@@ -132,7 +132,8 @@ expand_expression(symbol_t *func, node_t *root) {
         if (strcmp(op, "+") == 0) {
             puts("\taddq %r10, %rax");
         } else if (strcmp(op, "-") == 0) {
-            puts("\tsubq %r10, %rax");
+            puts("\tsubq %rax, %r10");
+            puts("\tmovq %r10, %rax");
         } else if (strcmp(op, "/") == 0) {
             fprintf(stderr, "not supported / ");exit(1);
             // TODO
