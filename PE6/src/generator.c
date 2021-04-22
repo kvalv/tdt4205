@@ -5,6 +5,8 @@ static const char *record[6] = {
     "%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"
 };
 
+static int if_counter = 0;
+static int while_counter = 0;
 
 static void
 generate_stringtable ( void )
@@ -165,6 +167,41 @@ expand_expression(symbol_t *func, node_t *root) {
         printf("\tmovq $%d, %%rax\n", *v);
     } else if (root->type == PRINT_STATEMENT){
         expand_print_statement(func, root);
+    } else if (root->type == IF_STATEMENT) {
+        node_t *relation = root->children[0];
+        node_t *then_block = root->children[1];
+        node_t *else_block = root->n_children == 3 ? root->children[2] : NULL;
+
+        int _counter = if_counter;
+        if_counter ++;
+
+        expand_expression(func, relation->children[0]);
+        puts("\tpushq %rax");
+        expand_expression(func, relation->children[1]);
+        puts("\tpopq %r10");
+        puts("\tcmpq %r10, %rax");
+        int *op = relation->data;
+        switch (*op) {
+            case '=':
+                printf("\tjne %s_ELSE_%d\n", func->name, _counter);
+                break;
+            case '<':
+                printf("jle %s_ELSE_%d\n", func->name, _counter);
+                break;
+            case '>':
+                printf("jge %s_ELSE_%d\n", func->name, _counter);
+                break;
+            default:
+                fprintf(stderr, "Not yet implemented");
+                exit(1);
+        }
+        expand_expression(func, then_block);
+        printf("\tjmp %s_ENDIF_%d\n", func->name, _counter);
+        printf("%s_ELSE_%d:\n", func->name, _counter);
+        if (else_block != NULL) {
+            expand_expression(func, else_block);
+        }
+        printf("%s_ENDIF_%d:\n", func->name, _counter);
     } else if (root->type == RETURN_STATEMENT) {
         expand_expression(func, root->children[0]);
     }
@@ -179,6 +216,9 @@ generate_global_function ( symbol_t *func  )
     puts ( "\tpushq %rbp  # store bp" );
     puts ( "\tmovq %rsp, %rbp" );
 
+    // reset these global variables since we're now processing a 'new' function
+    if_counter = 0;
+    while_counter = 0;
 
     for (int i=0; i < func->nparms; i++) {
         // TODO: support > 6 args
