@@ -258,6 +258,10 @@ expand_expression(symbol_t *func, node_t *root) {
             node_t *child = stmt_list->children[i];
             expand_expression(func, child);
         }
+    } else if (root->type == NULL_STATEMENT) {
+        // `while_counter` has been incremented, so we must subtract one
+        // to get the correct value
+        printf("jmp %s_WHILELOOP_%d\n", func->name, while_counter - 1);
     } else if (root->type == RETURN_STATEMENT) {
         expand_expression(func, root->children[0]);
         if (if_counter == 0) {
