@@ -111,9 +111,6 @@ expand_print_statement (symbol_t* func, node_t *root ) {
 
 void
 expand_expression(symbol_t *func, node_t *root) {
-    if (return_found) {
-        return;  // no point in expanding unreachable code.
-    }
     if (root->type == ASSIGNMENT_STATEMENT) {
         node_t *lhs = root->children[0];
         node_t *rhs = root->children[1];
@@ -263,8 +260,20 @@ expand_expression(symbol_t *func, node_t *root) {
         }
     } else if (root->type == RETURN_STATEMENT) {
         expand_expression(func, root->children[0]);
-        return_found = 1;
+        if (if_counter == 0) {
+            return_found = 1;
+        }
+        cleanup(func);
     }
+}
+
+void cleanup( symbol_t *func) {
+    size_t nbytes_alloc = n_local_variables(func) * 8;
+    size_t nbytes_dealloc = 8 * MIN(6, func->nparms) + nbytes_alloc;
+    printf ("\taddq $%zu, %%rsp # deallocate stack space\n", nbytes_dealloc);
+
+    puts ("\tpopq %rbp");
+    puts ("\tret" );
 }
 
 
@@ -302,11 +311,11 @@ generate_global_function ( symbol_t *func  )
         expand_expression(func, stmt);
     }
 
-    size_t nbytes_dealloc = 8 * MIN(6, func->nparms) + nbytes_alloc;
-    printf ("\taddq $%zu, %%rsp # deallocate stack space\n", nbytes_dealloc);
-
-    puts ("\tpopq %rbp");
-    puts ("\tret" );
+    if (if_counter == 0) {
+        // we need to do cleanup in case no explicit return is used.
+        puts("\tmovq $0, %rax"); // zero %rax so we don't return any other rubbish
+        cleanup(func);
+    }
 
 }
 
