@@ -7,6 +7,7 @@ static const char *record[6] = {
 
 static int if_counter = 0;
 static int while_counter = 0;
+static int return_found = 0; // flag
 
 static void
 generate_stringtable ( void )
@@ -106,6 +107,9 @@ expand_print_statement (symbol_t* func, node_t *root ) {
 
 void
 expand_expression(symbol_t *func, node_t *root) {
+    if (return_found) {
+        return;  // no point in expanding unreachable code.
+    }
     if (root->type == ASSIGNMENT_STATEMENT) {
         node_t *lhs = root->children[0];
         node_t *rhs = root->children[1];
@@ -246,6 +250,7 @@ expand_expression(symbol_t *func, node_t *root) {
         }
     } else if (root->type == RETURN_STATEMENT) {
         expand_expression(func, root->children[0]);
+        return_found = 1;
     }
 }
 
@@ -261,6 +266,7 @@ generate_global_function ( symbol_t *func  )
     // reset these global variables since we're now processing a 'new' function
     if_counter = 0;
     while_counter = 0;
+    return_found = 0;
 
     for (int i=0; i < func->nparms; i++) {
         // TODO: support > 6 args
@@ -280,7 +286,8 @@ generate_global_function ( symbol_t *func  )
     }
 
     for (int i=0; i < stmt_list->n_children; i++) {
-        expand_expression(func, stmt_list->children[i]);
+        node_t *stmt = stmt_list->children[i];
+        expand_expression(func, stmt);
     }
 
     size_t nbytes_dealloc = 8 * func->nparms + nbytes_alloc;
