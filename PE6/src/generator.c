@@ -81,7 +81,8 @@ int get_offset(symbol_t *func, node_t *root) {
         printf("variable '%s' is global -- %d\n", root->entry->name, is_global_variable(root->entry));
         exit(1);
     } else {
-        offset = - 8 * (1 + root->entry->seq + func->nparms);
+        // local variable...
+        offset = - 8 * (1 + root->entry->seq + MIN(6, func->nparms));
     }
     return offset;
 }
@@ -278,9 +279,7 @@ expand_expression(symbol_t *func, node_t *root) {
         printf("jmp %s_WHILELOOP_%d\n", func->name, while_counter - 1);
     } else if (root->type == RETURN_STATEMENT) {
         expand_expression(func, root->children[0]);
-        if (if_counter == 0) {
-            return_found = 1;
-        }
+        return_found = 1;
         cleanup(func);
     }
 }
@@ -329,7 +328,7 @@ generate_global_function ( symbol_t *func  )
         expand_expression(func, stmt);
     }
 
-    if (if_counter == 0) {
+    if (return_found == 0) {
         // we need to do cleanup in case no explicit return is used.
         puts("\tmovq $0, %rax"); // zero %rax so we don't return any other rubbish
         cleanup(func);
@@ -435,10 +434,6 @@ generate_program ( void )
     generate_stringtable();
     generate_global_variables();
 
-    //symbol_t f;
-    //symbol_t *pf = &f;
-    //tlhash_lookup(global_names, "main", strlen("main"), (void**) &pf);
-    //generate_main(pf);
     symbol_t *func = get_main_function();
     if (func == NULL) {
         fprintf(stderr, "No main function found.");
@@ -447,12 +442,5 @@ generate_program ( void )
 
     generate_main(func);
     generate_global_functions();
-
-    /* /1* Put some dummy stuff to keep the skeleton from crashing *1/ */
-    /* puts ( ".text" ); */
-    /* puts ( ".globl main" ); */
-    /* puts ( "main:" ); */
-    /* puts ( "\tcall _hello" ); */
-    /* puts ( "\tret" ); */
 
 }
