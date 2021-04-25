@@ -156,12 +156,16 @@ expand_expression(symbol_t *func, node_t *root) {
             if (strcmp(op, "-") == 0) {
                 expand_expression(func, left);
                 puts("negq %rax");
-            } else {
+            } else if (strcmp(op, "~") == 0) { // bitwise NOT
+                // not clear whether we should preserve the sign bit or not, so
+                // we just keep it simple and do not preserve it.
+                puts("\tnotq %rax");
+            }else {
                 fprintf(stderr, "Unknown unary operator.");
                 exit(1);
             }
             return;
-        } // else..
+        } // else.. binary operator.
         node_t *right = root->children[1];
         expand_expression(func, left);
         puts("\tpushq %rax");
@@ -183,6 +187,20 @@ expand_expression(symbol_t *func, node_t *root) {
             // divide by rax...
         } else if (strcmp(op, "*") == 0) {
             puts("\timulq %r10, %rax");
+        } else if (strcmp(op, "<<") == 0) {
+            puts("\tmovb %al, %cl");
+            puts("\tshlq %cl, %r10");
+            puts("\tmovq %r10, %rax");
+        } else if (strcmp(op, ">>") == 0) {
+            puts("\tmovb %al, %cl");
+            puts("\tshrq %cl, %r10");
+            puts("\tmovq %r10, %rax");
+        } else if (strcmp(op, "&") == 0) { // bitwise and
+            puts("\tandq %r10, %rax");
+        } else if (strcmp(op, "^") == 0) { // bitwise xor
+            puts("\txorq %r10, %rax");
+        } else if (strcmp(op, "|") == 0) { // bitwise or
+            puts("\torq %r10, %rax");
         }
     } else if (root->type == IDENTIFIER_DATA) {
         if (is_global_variable(root->entry)) {
