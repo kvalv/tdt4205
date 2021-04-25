@@ -77,8 +77,8 @@ int get_offset(symbol_t *func, node_t *root) {
         } else {
             offset = (1 + func->nparms - param->seq) * 8;
         }
-    } else if ((tlhash_lookup(global_names, root->data, strlen(root->data), (void*) &param)) == TLHASH_SUCCESS) {
-        printf("variable '%s' is global -- %d\n", root->entry->name, is_global_variable(root->entry));
+    } else if (is_global_variable(root->entry)) {
+        printf("Don't call `get_offset` for global variables! \n"); // kind of hacky...
         exit(1);
     } else {
         // local variable...
@@ -143,7 +143,7 @@ expand_expression(symbol_t *func, node_t *root) {
             }
         }
         printf("\tcall _%s\n", (char*) callee->data);
-        if (args->n_children > 6) {
+        if (args != NULL && args->n_children > 6) {
             // caller is responsible for cleaning up arguments 6 and upwards.
             size_t rest = (args->n_children - 6) * 8;
             printf("\taddq $%zu, %%rsp # remove 6th,... args from stack\n", rest);
