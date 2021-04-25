@@ -38,7 +38,7 @@ generate_global_variables ( void )
     for (int i=0; i < tlhash_size(global_names); i++) {
         symbol_t *sym = elems[i];
         if (sym != NULL && sym->type == SYM_GLOBAL_VAR) {
-            printf ("_%-10s .zero 8\n", sym->name);
+            printf ("_%-10s: .zero 8\n", sym->name);
         }
     }
     free(elems);
@@ -58,6 +58,16 @@ size_t n_local_variables(symbol_t *func) {
     return found;
 }
 
+
+int is_global_variable(symbol_t *sym) {
+    // make temp-variable so we can store the result of tlhash_lookup
+    // somewhere. It doesn't accept a NULL argument...
+    symbol_t dest;
+    symbol_t *pdest = &dest;
+    int ret_code = tlhash_lookup(global_names, sym->name, strlen(sym->name), &pdest);
+    return sym->type == SYM_GLOBAL_VAR && ret_code == TLHASH_SUCCESS;
+}
+
 int get_offset(symbol_t *func, node_t *root) {
     symbol_t *param;
     int offset;
@@ -67,6 +77,9 @@ int get_offset(symbol_t *func, node_t *root) {
         } else {
             offset = (1 + func->nparms - param->seq) * 8;
         }
+    } else if ((tlhash_lookup(global_names, root->data, strlen(root->data), (void*) &param)) == TLHASH_SUCCESS) {
+        printf("variable '%s' is global -- %d\n", root->entry->name, is_global_variable(root->entry));
+        exit(1);
     } else {
         offset = - 8 * (1 + root->entry->seq + func->nparms);
     }
@@ -81,21 +94,13 @@ expand_print_statement (symbol_t* func, node_t *root ) {
             size_t *id = child->data;
             printf("\tleaq STR%zu(%%rip), %%rsi\n", *id);
             puts ( "\tleaq strout(%rip), %rdi" );
-        } else if (child->type == NUMBER_DATA) {
-            int *value = child->data;
-            printf("\tmovq $%d, %%rsi\n", *value);
-            puts ( "\tleaq intout(%rip), %rdi" );
-        } else if (child->type == IDENTIFIER_DATA) {
-            symbol_t *param;
-            int offset = get_offset(func, child);
-            printf("\tmovq %d(%%rbp), %%rsi\n", offset);
-            puts ( "\tleaq intout(%rip), %rdi" );
-        } else if (child->type == EXPRESSION) {
-            printf("DEBUG -- expression call...\n");
+        } else {
             expand_expression(func, child);
-            puts ( "\tleaq intout(%rip), %rdi" );
             puts("\tmovq %rax, %rsi");
+            puts ( "\tleaq intout(%rip), %rdi" );
+
         }
+
         // copy of %rsp before we do 16-byte alignment. Shamelessly inspired by
         // https://stackoverflow.com/questions/4175281/what-does-it-mean-to-align-the-stack
         // %r12 is probably a safe choice too, since it is caller-owned by convention.
@@ -115,8 +120,13 @@ expand_expression(symbol_t *func, node_t *root) {
         node_t *lhs = root->children[0];
         node_t *rhs = root->children[1];
         expand_expression(func, rhs);
-        int offset = get_offset(func, lhs);
-        printf("\tmovq %%rax, %d(%%rbp)  # assign %s \n", offset, lhs->entry->name);
+        if (is_global_variable(lhs->entry)) {
+            printf("\tleaq _%s(%%rip), %%r11  # load addr to r11\n", lhs->entry->name);
+            printf("\tmovq %%rax, (%%r11)  # assign global %s \n", lhs->entry->name);
+        } else {
+            int offset = get_offset(func, lhs);
+            printf("\tmovq %%rax, %d(%%rbp)  # assign %s \n", offset, lhs->entry->name);
+        }
     } else if (root->type == EXPRESSION && root->data == NULL) {
         // -- function call --
         node_t *callee = root->children[0];
@@ -174,8 +184,12 @@ expand_expression(symbol_t *func, node_t *root) {
             puts("\timulq %r10, %rax");
         }
     } else if (root->type == IDENTIFIER_DATA) {
-        int offset = get_offset(func, root);
-        printf("\tmovq %d(%%rbp), %%rax  # get %s\n", offset, (char*) root->data);
+        if (is_global_variable(root->entry)) {
+            printf("\tmovq _%s(%%rip), %%rax  # load global var\n", root->entry->name);
+        } else {
+            int offset = get_offset(func, root);
+            printf("\tmovq %d(%%rbp), %%rax  # get %s\n", offset, (char*) root->data);
+        }
     } else if (root->type == NUMBER_DATA) {
         int *v = root->data;
         printf("\tmovq $%d, %%rax\n", *v);
@@ -419,7 +433,7 @@ void
 generate_program ( void )
 {
     generate_stringtable();
-    // generate_global_variables();
+    generate_global_variables();
 
     //symbol_t f;
     //symbol_t *pf = &f;
